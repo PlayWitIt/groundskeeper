@@ -1,0 +1,19 @@
+{
+	"schemaVersion": 1,
+	"id": "groundskeeper",
+	"version": "${version}",
+	"name": "Groundskeeper",
+	"description": "Turns the grass in a circle into mycelium with as little mycelium as possible: tills the grass so it turns to dirt, plants a few mycelium seeds where they will spread furthest (it reads the slopes), and makes a dirt path border so grass from outside can't creep back in. Then it waits nearby and fixes anything that grows back. Client-side only.",
+	"authors": ["PlayWit Creations"],
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": {
+		"client": ["com.greysworkshop.groundskeeper.Groundskeeper"]
+	},
+	"depends": {
+		"fabricloader": ">=0.18.0",
+		"minecraft": "~1.21.11",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
