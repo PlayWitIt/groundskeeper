@@ -23,7 +23,7 @@ import java.util.function.IntFunction;
 final class PanelScreen extends Screen {
 	private static final int W = 320, GREEN = 0xFF60D060, WHITE = 0xFFF0F0F0, GRAY = 0xFFA0A0B0, RED = 0xFFFF6060, PURPLE = 0xFFC080FF,
 			YELLOW = 0xFFFFD050;
-	private static int radius = 16;
+	static int radius = 16;
 
 	PanelScreen() {
 		super(Text.literal("Groundskeeper"));
@@ -44,7 +44,7 @@ final class PanelScreen extends Screen {
 			clearAndInit();
 		}).dimensions(x + half + 4, y, half, 20).tooltip(Tooltip.of(Text.literal(
 				"You're the middle. It plans the job and shows it in the world: the ring, purple dots where seeds go, red where grass can't be reached. "
-						+ "Or close this, press O in the middle, walk to the edge and press O."))).build());
+						+ "Then Numpad 1 (or Start) starts, Numpad 2 pauses, Numpad 3 stops."))).build());
 		y += 24;
 		boolean running = Job.running();
 		ButtonWidget start = ButtonWidget.builder(Text.literal(running ? "Stop" : "Start"), b -> {

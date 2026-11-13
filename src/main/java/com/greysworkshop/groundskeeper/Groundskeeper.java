@@ -18,14 +18,18 @@ import org.slf4j.LoggerFactory;
 public final class Groundskeeper implements ClientModInitializer {
 	public static final String MOD_ID = "groundskeeper";
 	static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
-	static KeyBinding key, panel;
+	static KeyBinding key, panel, startKey, pauseKey, stopKey;
 
 	@Override
 	public void onInitializeClient() {
 		GkConfig.load();
 		KeyBinding.Category category = KeyBinding.Category.create(Identifier.of(MOD_ID, "main"));
-		key = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.groundskeeper.main", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_O, category));
-		panel = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.groundskeeper.panel", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_KP_3, category));
+		startKey = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.groundskeeper.start", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_KP_1, category));
+		pauseKey = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.groundskeeper.pause", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_KP_2, category));
+		stopKey = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.groundskeeper.stop", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_KP_3, category));
+		// Not bound to start with (O is Naughty or Nice's radar): set them in Controls if wanted, or use /gk panel.
+		key = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.groundskeeper.main", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN, category));
+		panel = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.groundskeeper.panel", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN, category));
 		ClientTickEvents.END_CLIENT_TICK.register(Groundskeeper::tick);
 		HudElementRegistry.addLast(Identifier.of(MOD_ID, "hud"), Hud::render);
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, access) -> Commands.register(dispatcher, access));
@@ -45,6 +49,15 @@ public final class Groundskeeper implements ClientModInitializer {
 	private static void tick(MinecraftClient client) {
 		while (key.wasPressed()) {
 			if (client.currentScreen == null) Selection.key(client, client.player != null && client.player.isSneaking());
+		}
+		while (startKey.wasPressed()) {
+			if (client.currentScreen == null) Job.startOrResume(client);
+		}
+		while (pauseKey.wasPressed()) {
+			if (client.currentScreen == null) Job.togglePause(client);
+		}
+		while (stopKey.wasPressed()) {
+			if (client.currentScreen == null) Job.stop(client, "Stopped.");
 		}
 		while (panel.wasPressed()) {
 			if (client.currentScreen == null && client.player != null) client.setScreen(new PanelScreen());

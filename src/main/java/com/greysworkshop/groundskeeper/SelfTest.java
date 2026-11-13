@@ -44,6 +44,8 @@ final class SelfTest {
 	private static int tick = -1, phaseStart, passed, failed;
 	private static String phase = "setup";
 	private static int myceliumBefore, outsideGrassBefore;
+	private static float hitYaw;
+	private static int hitDone;
 
 	private SelfTest() {}
 
@@ -142,6 +144,28 @@ final class SelfTest {
 			}
 			case "work" -> {
 				if (since % 400 == 0) log("work: " + Job.status.getString() + " · " + Job.summary() + " · left " + Job.left());
+				// Hit: it lets go of the keys and the camera (for kill aura), then carries on 3 seconds after.
+				if (since == 600) command(client, "damage @p 3 minecraft:generic");
+				if (since == 606) {
+					hitYaw = client.player.getYaw();
+					hitDone = Job.tilled + Job.pathed + Job.seeded + Job.dirted;
+					check("hit: holding (" + Job.status.getString() + ")", Job.status.getString().startsWith("Holding"));
+				}
+				if (since == 640) {
+					check("hit: hands off, camera and keys alone (yaw " + hitYaw + " -> " + client.player.getYaw() + ")",
+							client.player.getYaw() == hitYaw && !client.options.forwardKey.isPressed() && !client.options.jumpKey.isPressed()
+									&& Job.tilled + Job.pathed + Job.seeded + Job.dirted == hitDone);
+				}
+				if (since == 720) check("hit: carried on after 3 seconds (" + Job.status.getString() + ")", !Job.status.getString().startsWith("Holding"));
+				// Numpad 2 pauses, Numpad 1 carries on.
+				if (since == 1000) Job.togglePause(client);
+				if (since == 1005) hitDone = Job.tilled + Job.pathed + Job.seeded + Job.dirted;
+				if (since == 1100) {
+					check("pause: nothing done while paused (" + Job.status.getString() + ")",
+							Job.paused && Job.tilled + Job.pathed + Job.seeded + Job.dirted == hitDone && !client.options.forwardKey.isPressed());
+					Job.startOrResume(client);
+				}
+				if (since == 1300) check("pause: carries on after Numpad 1", !Job.paused && Job.tilled + Job.pathed + Job.seeded + Job.dirted > hitDone);
 				if (Job.state == Job.State.WATCH) {
 					log("work done in " + since + " ticks (" + since / 20 + " s): " + Job.summary());
 					check("unpacked the shulker box (" + Job.unpacked + " mycelium) and picked it back up",

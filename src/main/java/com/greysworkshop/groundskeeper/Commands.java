@@ -45,13 +45,17 @@ final class Commands {
 				})))
 				.then(literal("start").executes(c -> {
 					MinecraftClient client = MinecraftClient.getInstance();
-					client.send(() -> {
-						if (Selection.mode != Selection.Mode.READY) {
-							c.getSource().sendError(Text.literal("Pick a circle first: press O in the middle, then O at the edge (or /gk circle <radius>)."));
-							return;
-						}
-						Job.start(client, Plan.make(client.world, Selection.center, Selection.radius, true));
-					});
+					client.send(() -> Job.startOrResume(client));
+					return 1;
+				}))
+				.then(literal("pause").executes(c -> {
+					MinecraftClient client = MinecraftClient.getInstance();
+					client.send(() -> Job.togglePause(client));
+					return 1;
+				}))
+				.then(literal("panel").executes(c -> {
+					MinecraftClient client = MinecraftClient.getInstance();
+					client.send(() -> client.setScreen(new PanelScreen()));
 					return 1;
 				}))
 				.then(literal("stop").executes(c -> {
@@ -152,8 +156,8 @@ final class Commands {
 	private static int help(CommandContext<FabricClientCommandSource> c) {
 		FabricClientCommandSource s = c.getSource();
 		s.sendFeedback(Text.literal("Groundskeeper: grass to mycelium in a circle.").formatted(Formatting.DARK_GREEN));
-		s.sendFeedback(Text.literal("Press O in the middle, walk to the edge, press O (it shows the plan), press O to start. O again stops. Shift+O cancels."));
-		s.sendFeedback(Text.literal("/gk circle <radius> · start · stop · cancel · status · blocked · skipped").formatted(Formatting.GRAY));
+		s.sendFeedback(Text.literal("Stand in the middle: Numpad 1 starts (a circle around you, the panel's radius, or /gk circle <radius> first to see the plan). Numpad 2 pauses, Numpad 3 stops. /gk panel opens the panel."));
+		s.sendFeedback(Text.literal("/gk circle <radius> · start · pause · stop · panel · cancel · status · blocked · skipped").formatted(Formatting.GRAY));
 		s.sendFeedback(Text.literal("/gk spacing <2-12> · border <path|mycelium|none> · speed <1-20> · flowers <true|false> · watch <true|false> · minhealth <n> · hud <true|false>"
 				+ " · swap <from> <to> | off").formatted(Formatting.GRAY));
 		return 1;

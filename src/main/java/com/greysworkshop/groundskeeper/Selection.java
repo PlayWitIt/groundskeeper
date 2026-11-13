@@ -123,7 +123,7 @@ final class Selection {
 		String tools = Job.toolWarning(inv, plan);
 		if (tools != null) line(p, tools, Formatting.YELLOW);
 		String bad = Job.missing(inv, plan);
-		line(p, bad == null ? "Press O to start · Shift+O to cancel" : bad, bad == null ? Formatting.AQUA : Formatting.RED);
+		line(p, bad == null ? "Numpad 1 to start · /gk cancel to drop it" : bad, bad == null ? Formatting.AQUA : Formatting.RED);
 	}
 
 	private static void line(ClientPlayerEntity p, String s, Formatting f) {

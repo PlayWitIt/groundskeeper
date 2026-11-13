@@ -37,22 +37,27 @@ Carry a **hoe** (any) and a **shovel** (for the border; also makes breaking fast
 of mycelium** in your inventory is fine: when the loose mycelium runs out, it places the box, empties it, breaks it and
 picks it back up.
 
-**Numpad 3** opens the panel: radius slider, *Set circle around me*, Start/Stop, settings, and the plan (seeds, what
-you have, what's missing).
+Stand in the middle of where you want it and:
+- **Numpad 1** starts (or carries on after a pause). With no circle picked it makes one around you, at the panel's
+  radius (16 to start with). To see the plan first: `/gk circle <radius>`, then Numpad 1.
+- **Numpad 2** pauses; press it again (or Numpad 1) to carry on.
+- **Numpad 3** stops.
 
-Or with **O**:
-1. Stand in the middle and press **O**.
-2. Walk to where the edge should be (a ring of particles follows you) and press **O**. Chat shows the plan. In the world
-   you see the ring, **purple** dots where seeds go and **red** dots on grass it can't get at.
-3. Press **O** to start. **O** again stops. **Shift+O** clears the circle.
+`/gk panel` opens the panel: radius slider, *Set circle around me*, Start/Stop, settings, and the plan (seeds, what you
+have, what's missing). In the world you see the ring, **purple** dots where seeds go and **red** dots on grass it can't
+get at. The keys can be changed in Controls, where there are also two unbound ones: the panel, and walking the circle
+out (press it in the middle, walk to the edge, press it again).
 
-It stops on low health, when you die or disconnect, and pauses while you have a screen open.
+**When you're hit** it lets go of the keys, the camera and the block it's breaking, so your other mods (kill aura) can
+fight. It carries on 3 seconds after the last hit, once no hostile mob or other player is within 6 blocks.
+
+On low health it holds off the same way until you're back above it. It stops when you die or disconnect, and waits while you have a screen open.
 
 ## Settings
 | | |
 |---|---|
 | `/gk circle <radius>` | circle around where you stand |
-| `/gk start` / `stop` / `cancel` / `status` | |
+| `/gk start` / `pause` / `stop` / `panel` / `cancel` / `status` | |
 | `/gk blocked` | grass it can't get at (a sapling, glass or a slab on top) |
 | `/gk skipped` | blocks it gave up on, and why |
 | `/gk spacing <2-12>` | blocks between seeds (default 5; smaller is faster but uses more) |
@@ -60,7 +65,7 @@ It stops on low health, when you die or disconnect, and pauses while you have a 
 | `/gk speed <1-20>` | block changes a second (default 10) |
 | `/gk flowers <true\|false>` | break flowers on grass (default true) |
 | `/gk watch <true\|false>` | stay and watch it spread afterwards (default true) |
-| `/gk minhealth <n>` | stop at this health (default 10, 5 hearts) |
+| `/gk minhealth <n>` | hold off at or below this health (default 10, 5 hearts) |
 | `/gk swap <from> <to>` / `off` | any block to any other block (exposed tops only), e.g. `/gk swap sand red_sand` |
 
 ## Good to know

@@ -69,6 +69,57 @@ final class Job {
 		return state != State.OFF;
 	}
 
+	/** Paused by the player (Numpad 2, /gk pause). */
+	static boolean paused;
+	/** Holding off for a fight (hit, or low health) until this tick, so kill aura has the camera and the keys. */
+	private static int fightUntil;
+	private static float lastHealth = -1;
+	private static boolean holding;
+
+	/** Numpad 1 or /gk start: resume if paused, else start on the circle (one around you if none is picked). */
+	static void startOrResume(MinecraftClient client) {
+		ClientPlayerEntity p = client.player;
+		if (p == null || client.world == null) return;
+		if (running()) {
+			if (paused) togglePause(client);
+			return;
+		}
+		if (Selection.mode != Selection.Mode.READY) {
+			Selection.set(client, p, Walker.feet(p).down(), PanelScreen.radius);
+		}
+		start(client, Plan.make(client.world, Selection.center, Selection.radius, true));
+	}
+
+	/** Numpad 2 or /gk pause. */
+	static void togglePause(MinecraftClient client) {
+		ClientPlayerEntity p = client.player;
+		if (!running() || p == null) return;
+		paused = !paused;
+		chat(p, Text.literal(paused ? "Paused. Numpad 2 (or Numpad 1) to carry on." : "Carrying on.").formatted(Formatting.YELLOW));
+		if (!paused) status = Text.literal("Working");
+	}
+
+	/** A hostile mob or another player close by. */
+	private static boolean enemyNear(ClientPlayerEntity p, ClientWorld w) {
+		return !w.getEntitiesByClass(net.minecraft.entity.LivingEntity.class, p.getBoundingBox().expand(6),
+				e -> e != p && e.isAlive() && (e instanceof net.minecraft.entity.mob.Monster || e instanceof net.minecraft.entity.player.PlayerEntity)).isEmpty();
+	}
+
+	/** Lets go of everything (keys, camera, the block being broken) so other mods can fight. */
+	private static void hold(MinecraftClient client, ClientPlayerEntity p, Text why) {
+		if (!holding) {
+			holding = true;
+			release(client);
+			// Our shulker box screen open: close it, and open it again afterwards.
+			if (state == State.UNPACK && stage == 3 && p.currentScreenHandler != p.playerScreenHandler) {
+				p.closeHandledScreen();
+				stage = 2;
+			}
+			log("holding: {}", why.getString());
+		}
+		status = why;
+	}
+
 	// ---------------------------------------------------------------- start and stop
 
 	static void start(MinecraftClient client, Plan p) {
@@ -85,6 +136,9 @@ final class Job {
 		tilled = seeded = pathed = swapped = cleared = passes = unpacked = dirted = 0;
 		failed.clear();
 		reachFails.clear();
+		paused = holding = false;
+		fightUntil = 0;
+		lastHealth = -1;
 		farmlandSeen.clear();
 		startedAt = System.currentTimeMillis();
 		atCenter = false;
@@ -169,9 +223,23 @@ final class Job {
 			stop(client, "Stopped: you died.");
 			return;
 		}
-		if (p.getHealth() <= GkConfig.INSTANCE.minHealth) {
-			stop(client, "Stopped: low health.");
+		// Hit: hold off for 3 seconds after the last hit, and while an enemy is still close.
+		float hp = p.getHealth();
+		if (p.hurtTime > 0 || lastHealth >= 0 && hp < lastHealth) fightUntil = ticks + 60;
+		lastHealth = hp;
+		boolean low = hp <= GkConfig.INSTANCE.minHealth;
+		if (ticks < fightUntil && enemyNear(p, w)) fightUntil = Math.max(fightUntil, ticks + 20);
+		if (paused || low || ticks < fightUntil) {
+			hold(client, p, Text.literal(paused ? "Paused (Numpad 2 to carry on)"
+					: low ? "Holding: low health (carries on above " + GkConfig.INSTANCE.minHealth / 2 + " hearts)" : "Holding: under attack"));
 			return;
+		}
+		if (holding) {
+			holding = false;
+			wait = tries = reachTries = 0;
+			walkingTo = null;
+			status = Text.literal("Working");
+			log("carrying on");
 		}
 		// Your screen open (inventory, chat): wait. Ours (the shulker box) is fine.
 		if (client.currentScreen != null && !(state == State.UNPACK && (stage == 2 || stage == 3))) {
