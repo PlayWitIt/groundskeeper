@@ -137,6 +137,7 @@ final class Job {
 		failed.clear();
 		reachFails.clear();
 		paused = holding = false;
+		startCount = -1;
 		fightUntil = 0;
 		lastHealth = -1;
 		farmlandSeen.clear();
@@ -219,6 +220,7 @@ final class Job {
 		ClientWorld w = client.world;
 		if (p == null || w == null || client.interactionManager == null) return;
 		ticks++;
+		countUsed(p);
 		if (p.isDead()) {
 			stop(client, "Stopped: you died.");
 			return;
@@ -347,18 +349,41 @@ final class Job {
 			case PATH -> pathed++;
 			// Only what it put in itself: mycelium sometimes gets there first.
 			case SEED -> {
-				if (t.placed) seeded++;
+				used(t); // counted from the inventory: see countUsed
 			}
 			case SWAP -> {
-				if (t.placed) swapped++;
+				if (used(t)) swapped++;
 			}
 			case DIRT -> {
-				if (t.placed && t.placedMycelium) seeded++;
+				if (t.placedMycelium) used(t);
 				else if (t.placed) dirted++;
 			}
 		}
 		cool = Math.max(0, 20 / GkConfig.INSTANCE.speed - 1);
 		current = null;
+	}
+
+	/** Mycelium (with what's in boxes) when the job started. */
+	private static int startCount = -1;
+
+	/**
+	 * Seeds are what has left the inventory, not what it saw appear: on a server a placement it sees can still be
+	 * refused a moment later (the block comes back, and it does that one again on the next pass).
+	 */
+	private static void countUsed(ClientPlayerEntity p) {
+		if (plan == null || plan.swap || state == State.UNPACK) return;
+		int now = itemCount(p.getInventory(), placeItem());
+		if (startCount < 0) startCount = now;
+		seeded = Math.max(0, startCount - now);
+	}
+
+	/** It placed a block there and one actually left the inventory (not grown in by itself, or a placement the server refused). */
+	private static boolean used(Plan.Task t) {
+		MinecraftClient c = MinecraftClient.getInstance();
+		if (!t.placed || c.player == null) return false;
+		boolean used = itemCount(c.player.getInventory(), t.placedMycelium || t.kind != Plan.Kind.DIRT ? placeItem() : Items.DIRT) < t.countBefore;
+		if (!used) log("{} at {} filled without using a block", t.kind, t.pos.toShortString());
+		return used;
 	}
 
 	private static final String CANT_REACH = "can't get there";
@@ -442,6 +467,7 @@ final class Job {
 		}
 		BlockPos against = t.pos.offset(face.getOpposite());
 		select(client, p, slot);
+		t.countBefore = itemCount(p.getInventory(), item);
 		Vec3d hit = Vec3d.ofCenter(against).add(Vec3d.of(face.getVector()).multiply(0.5));
 		look(p, hit);
 		client.interactionManager.interactBlock(p, Hand.MAIN_HAND, new BlockHitResult(hit, face, against, false));
@@ -785,11 +811,15 @@ final class Job {
 			return true;
 		}
 		if (walkingTo == null || !walkingTo.equals(pos) || walker.arrived() && !walker.moving()) {
-			double want = range - 0.7;
+			// Well inside reach: it stops up to 0.3 off the middle of the cell it walks to.
+			double want = range - 1.1;
 			Vec3d top = Vec3d.ofCenter(pos).add(0, 0.5, 0);
 			Predicate<BlockPos> goal = c -> Vec3d.ofBottomCenter(c).add(0, 1.62, 0).squaredDistanceTo(top) <= want * want
 					&& !(notOnIt && c.getX() == pos.getX() && c.getZ() == pos.getZ());
 			if (++reachTries > 4 || !walker.plan(w, p, goal, bounds(p))) {
+				BlockPos f = Walker.feet(p);
+				log("no way to {} (try {}): me {} standable {} fluid {} below {} expanded {}", pos.toShortString(), reachTries, p.getEntityPos(),
+						Walker.standable(w, f), w.getFluidState(f), w.getBlockState(f.down()).getBlock(), walker.expanded);
 				walker.stop(client);
 				fail(current, CANT_REACH);
 				return false;

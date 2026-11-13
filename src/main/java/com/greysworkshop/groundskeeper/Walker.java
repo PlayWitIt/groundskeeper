@@ -26,6 +26,8 @@ final class Walker {
 	private static final int MAX_NODES = 40_000;
 
 	private List<BlockPos> path = List.of();
+	/** Cells the last plan looked at. */
+	int expanded;
 	private int at;
 	private Vec3d flyTo;
 	private int stuckTicks;
@@ -97,9 +99,19 @@ final class Walker {
 		flyTo = null;
 		towerCell = null;
 		BlockPos start = feet(player);
-		if (goal.test(start)) {
-			path = List.of();
+		// Swimming in deep water: plan from the surface, where it can climb out onto the bank.
+		if (!standable(world, start)) {
+			BlockPos s = start;
+			for (int i = 0; i < 12 && !world.getFluidState(s).isEmpty(); i++) s = s.up();
+			if (!s.equals(start) && passable(world, s)) start = s;
+		}
+		expanded = 0;
+		if (goal.test(start) && standable(world, start)) {
+			// Already there, but off to one side (on the edge of a hole, say): step to the middle first.
+			double off = Math.hypot(start.getX() + 0.5 - player.getX(), start.getZ() + 0.5 - player.getZ());
+			path = off < 0.3 ? List.of() : List.of(start);
 			at = 0;
+			stuckTicks = 0;
 			return true;
 		}
 		record Node(BlockPos pos, double g, double f) {}
@@ -108,7 +120,6 @@ final class Walker {
 		PriorityQueue<Node> open = new PriorityQueue<>((a, b) -> Double.compare(a.f, b.f));
 		open.add(new Node(start, 0, 0));
 		best.put(start, 0.0);
-		int expanded = 0;
 		BlockPos found = null;
 		// Cells it would stand in on top of a block it placed itself.
 		java.util.Set<BlockPos> raised = new java.util.HashSet<>();
@@ -152,7 +163,9 @@ final class Walker {
 						if (!canMove(world, n.pos, next, dx, dy, dz)) continue;
 						// Drops over three blocks hurt a little: only when nothing else will do.
 							double cost = (dx != 0 && dz != 0 ? 1.414 : 1) + (dy > 0 ? 0.6 : dy < -3 ? 8 : dy < 0 ? -dy * 0.25 : 0);
-						if (!world.getBlockState(next).getFluidState().isEmpty()) cost += 3;
+						// Water slows it and currents push it off the path: around it if there's a dry way.
+						net.minecraft.fluid.FluidState fluid = world.getBlockState(next).getFluidState();
+						if (!fluid.isEmpty()) cost += fluid.isStill() ? 3 : 8;
 						double g = n.g + cost;
 						if (g < best.getOrDefault(next, Double.MAX_VALUE)) {
 							best.put(next, g);
@@ -264,7 +277,9 @@ final class Walker {
 		double dx = aim.x - player.getX(), dz = aim.z - player.getZ();
 		double flat = Math.sqrt(dx * dx + dz * dz);
 		BlockPos feet = feet(player);
-		if (flat < 0.3 && Math.abs(feet.getY() - next.getY()) <= 1 || feet.equals(next) && flat < 0.45) {
+		// The last step: right to the middle, where the plan expected it to stand.
+		boolean last = at == path.size() - 1;
+		if (flat < 0.3 && Math.abs(feet.getY() - next.getY()) <= 1 || !last && feet.equals(next) && flat < 0.45) {
 			at++;
 			if (at >= path.size()) {
 				stop(client);
@@ -273,9 +288,12 @@ final class Walker {
 			return tick(client);
 		}
 		face(player, aim);
-		press(client, true, next.getY() > feet.getY() && (player.isOnGround() || player.horizontalCollision), false);
+		// In water: keep swimming up (out onto the bank, up a waterfall) unless the path goes down.
+		boolean wet = player.isTouchingWater();
+		press(client, true, wet ? next.getY() >= feet.getY() : next.getY() > feet.getY() && (player.isOnGround() || player.horizontalCollision), false);
 		// Slow down onto a narrow last step so it doesn't overshoot.
-		client.options.sneakKey.setPressed(at == path.size() - 1 && flat < 1.2);
+		// (Not when the step is down: sneaking won't step off an edge.)
+		client.options.sneakKey.setPressed(at == path.size() - 1 && flat < 1.2 && next.getY() >= feet.getY());
 		moving = true;
 		return checkStuck(client, player, aim);
 	}
@@ -371,7 +389,10 @@ final class Walker {
 		} else {
 			stuckTicks++;
 		}
-		if (stuckTicks > 60) {
+		if (stuckTicks > (player.isTouchingWater() ? 100 : 60)) {
+			stuckCount++;
+			if (Boolean.getBoolean("groundskeeper.debug")) Groundskeeper.LOGGER.info("[walker] stuck at {} heading {}{}", player.getBlockPos().toShortString(), towards,
+					player.isTouchingWater() ? " (in water)" : "");
 			heading = null;
 			stop(client);
 			path = List.of();
@@ -380,6 +401,9 @@ final class Walker {
 		}
 		return true;
 	}
+
+	/** Times it gave up on a step (for the self-test). */
+	static int stuckCount;
 
 	private static void face(ClientPlayerEntity player, Vec3d target) {
 		double dx = target.x - player.getX(), dz = target.z - player.getZ();

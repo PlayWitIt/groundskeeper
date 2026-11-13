@@ -58,6 +58,8 @@ final class Plan {
 		boolean placed;
 		/** What it put in was mycelium (not dirt). */
 		boolean placedMycelium;
+		/** How many of the block it had just before the last place. */
+		int countBefore;
 		String why = "";
 		/** Why it was made a seed: grid, slope, water. */
 		String reason = "";

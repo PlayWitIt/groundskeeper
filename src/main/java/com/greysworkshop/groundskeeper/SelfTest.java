@@ -173,6 +173,7 @@ final class SelfTest {
 					int used = myceliumBefore - Job.itemCount(client.player.getInventory(), Items.MYCELIUM);
 					check("mycelium used = seeds placed (" + used + " vs " + Job.seeded + ")", used == Job.seeded);
 					check("skipped little (" + Job.failed + ")", Job.failed.size() <= 3);
+					check("walker rarely stuck, with a waterfall and a deep pond about (" + Walker.stuckCount + ")", Walker.stuckCount <= 3);
 					int[] r = server(client, s -> new int[] {liveGrassInside(s.getOverworld()), ringOpen(s.getOverworld())}, null);
 					check("no workable grass left inside (" + r[0] + ")", r[0] == 0);
 					check("the border ring is all path (" + r[1] + " open)", r[1] == 0);
@@ -249,6 +250,12 @@ final class SelfTest {
 				w.setBlockState(q.up(), Blocks.AIR.getDefaultState(), 3);
 				w.setBlockState(q, Blocks.WATER.getDefaultState(), 3);
 			}
+			// The middle of the pond is 2 deep.
+			w.setBlockState(new BlockPos(10, GROUND + height(10, -1) - 1, -1), Blocks.WATER.getDefaultState(), 3);
+			// A waterfall: a stone pillar 4 high with a spring on top, pouring down onto the slope.
+			BlockPos foot = new BlockPos(-2, GROUND + height(-2, -11), -11);
+			for (int i = 1; i <= 4; i++) w.setBlockState(foot.up(i), Blocks.STONE.getDefaultState(), 3);
+			w.setBlockState(foot.up(5), Blocks.WATER.getDefaultState(), 3);
 			// A sapling and a glass block on grass, snow on the peak.
 			BlockPos sap = new BlockPos(SAPLING.getX(), GROUND + height(SAPLING.getX(), SAPLING.getZ()) + 1, SAPLING.getZ());
 			w.setBlockState(sap, Blocks.OAK_SAPLING.getDefaultState(), 3);
@@ -326,6 +333,8 @@ final class SelfTest {
 		for (int x = -R; x <= R; x++) for (int z = -R; z <= R; z++) {
 			if (!ringCol(x, z)) continue;
 			BlockPos g = ground(w, x, z);
+			// Under running water: nothing can make path there (the plan lists it as blocked).
+			if (g != null && !w.getFluidState(g.up()).isEmpty()) continue;
 			if (g != null && (w.getBlockState(g).isOf(Blocks.GRASS_BLOCK) || w.getBlockState(g).isOf(Blocks.DIRT))) {
 				log("ring open at " + g.toShortString() + ": " + w.getBlockState(g).getBlock());
 				n++;

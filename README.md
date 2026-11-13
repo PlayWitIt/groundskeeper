@@ -70,6 +70,8 @@ On low health it holds off the same way until you're back above it. It stops whe
 
 ## Good to know
 - Mycelium doesn't stop mobs spawning (only the mushroom biome does).
+- It swims: out of ponds, up waterfalls, and around running water when there's a dry way. Grass under running water
+  can't be reached (it shows in `/gk blocked`), so it seeds around it instead.
 - Seeds leave a dirt drop each (the broken grass). It's thrown out only if the inventory is full when it needs to pick
   the shulker box back up.
 - It won't use a tool with 2 or fewer uses left.
@@ -78,4 +80,5 @@ On low health it holds off the same way until you're back above it. It stops whe
 ## Developing
 `./gradlew build` builds the jar. `./gradlew runSelfTest` builds a mini mountain in a test world (a plateau, a spike,
 an overhang, a pond, a sapling and glass on grass), runs the job in survival, then speeds up random ticks 100x and
-checks the circle ends up all mycelium with no grass getting in.
+checks the circle ends up all mycelium with no grass getting in. The map also has a waterfall and a 2-deep pond, and it
+checks the walker doesn't get stuck. It also hits the player and pauses the job, to check it lets go and carries on.
