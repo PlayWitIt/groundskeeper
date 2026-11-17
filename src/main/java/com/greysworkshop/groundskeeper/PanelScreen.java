@@ -88,10 +88,16 @@ final class PanelScreen extends Screen {
 			changed();
 		}, "On: flowers on grass are broken (they drop). Off: that grass is left alone."));
 		y += step;
-		addDrawableChild(toggle(x, y, half, "Watch afterwards", () -> cf.watch, v -> {
+		int watchW = 66;
+		addDrawableChild(toggle(x, y, watchW, "Watch", () -> cf.watch, v -> {
 			cf.watch = v;
 			GkConfig.save();
-		}, "After the work, stay in the middle, look again every 30 seconds and fix grass that comes back, until it's all mycelium."));
+		}, "Watch afterwards: after the work, stay in the middle, look again every 30 seconds and fix grass that comes back, until it's all mycelium."));
+		addDrawableChild(toggle(x + watchW + 4, y, half - watchW - 4, "Hit pause", () -> cf.holdWhenHit, v -> {
+			cf.holdWhenHit = v;
+			GkConfig.save();
+		}, "On: when you're hit it lets go of the keys and the camera for 3 seconds (and while the enemy is close), so kill aura can fight. "
+				+ "Off: it keeps working. Either way it holds off at low health (/gk minhealth)."));
 		int hudW = 56;
 		addDrawableChild(toggle(x + half + 4, y, hudW, "HUD", () -> cf.hud, v -> {
 			cf.hud = v;
@@ -183,7 +189,7 @@ final class PanelScreen extends Screen {
 			if (a.getX() < 0 || a.getY() < 0 || a.getX() + a.getWidth() > width || a.getY() + a.getHeight() > height) return false;
 			for (var b : all) if (a != b && a.getX() < b.getX() + b.getWidth() && b.getX() < a.getX() + a.getWidth() && a.getY() < b.getY() + b.getHeight() && b.getY() < a.getY() + a.getHeight()) return false;
 		}
-		return all.size() >= 16;
+		return all.size() >= 17;
 	}
 
 	/** A setting that changes the plan: save it, and plan again. */

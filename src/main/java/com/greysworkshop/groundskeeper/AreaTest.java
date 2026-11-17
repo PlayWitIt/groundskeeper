@@ -49,6 +49,7 @@ final class AreaTest {
 	private static boolean seamsChecked, restarted, nightDone, wardenDone, creeperDone, fed;
 	private static BlockPos roof;
 	private static double creeperStart;
+	private static int insideAt = -1, creeperWork;
 
 	private AreaTest() {}
 
@@ -212,7 +213,9 @@ final class AreaTest {
 			roof = BlockPos.ORIGIN;
 			log("night set at " + since);
 		}
-		if (roof == BlockPos.ORIGIN && Shelter.mode == Shelter.Mode.INSIDE) {
+		// Checked half a second after it's inside: the roof shows on the client a moment before the server has it.
+		if (roof == BlockPos.ORIGIN && Shelter.mode == Shelter.Mode.INSIDE && insideAt < 0) insideAt = tick;
+		if (roof == BlockPos.ORIGIN && Shelter.mode == Shelter.Mode.INSIDE && tick >= insideAt + 10) {
 			roof = Shelter.ground();
 			BlockPos r = roof;
 			int[] s = server(client, sv -> {
@@ -274,9 +277,13 @@ final class AreaTest {
 				check("lit creeper: ran from it (" + Math.round(creeperStart * 10) / 10.0 + " -> " + Math.round(d * 10) / 10.0 + " blocks)", d > creeperStart + 4);
 				command(client, "kill @e[type=minecraft:creeper]");
 				command(client, "difficulty peaceful");
+				creeperWork = Job.tilled + Job.pathed + Job.seeded + Job.dirted;
 			}
 			if (t == 200) {
-				check("after the creeper: working again (" + Job.status.getString() + ")", Job.running() && !client.options.forwardKey.isPressed() || Job.running() && Job.state != Job.State.WORK);
+				// Walking to the next block is working too: what matters is it stopped running and got on with it.
+				int work = Job.tilled + Job.pathed + Job.seeded + Job.dirted;
+				check("after the creeper: working again (" + Job.status.getString() + ", " + creeperWork + " -> " + work + ")",
+						Job.running() && !Job.status.getString().startsWith("Running from") && (work != creeperWork || Job.state != Job.State.WORK));
 				creeperDone = true;
 				phaseFlag = "";
 			}

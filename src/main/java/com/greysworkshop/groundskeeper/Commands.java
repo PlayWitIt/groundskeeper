@@ -83,6 +83,8 @@ final class Commands {
 						"Eats when hungry: " + BoolArgumentType.getBool(c, "on")))))
 				.then(literal("totem").then(argument("on", BoolArgumentType.bool()).executes(c -> set(c, cf -> cf.totem = BoolArgumentType.getBool(c, "on"),
 						"Keeps a totem in an empty off hand: " + BoolArgumentType.getBool(c, "on")))))
+				.then(literal("hitpause").then(argument("on", BoolArgumentType.bool()).executes(c -> set(c, cf -> cf.holdWhenHit = BoolArgumentType.getBool(c, "on"),
+						BoolArgumentType.getBool(c, "on") ? "When hit: holds off for 3 seconds (keys and camera left to your other mods)" : "When hit: keeps working"))))
 				.then(literal("tools")
 						.executes(c -> {
 							GkConfig cf = GkConfig.INSTANCE;

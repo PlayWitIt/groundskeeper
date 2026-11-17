@@ -40,6 +40,8 @@ import java.util.stream.Stream;
 final class SelfTest {
 	private static final String WORLD = "groundskeeper-selftest";
 	private static final int R = 16, GROUND = -61;
+	private static boolean heldAfterHit;
+	private static Job.State hitState;
 	private static final BlockPos SAPLING = new BlockPos(5, 0, -5), GLASS = new BlockPos(-4, 0, -8);
 	private static boolean started;
 	private static int tick = -1, phaseStart, passed, failed;
@@ -153,7 +155,23 @@ final class SelfTest {
 			}
 			case "work" -> {
 				if (since % 400 == 0) log("work: " + Job.status.getString() + " · " + Job.summary() + " · left " + Job.left());
-				// Hit: it lets go of the keys and the camera (for kill aura), then carries on 3 seconds after.
+				// Pause when hit is off by default: a hit doesn't stop the work.
+				if (since == 540) {
+					check("pause when hit is off by default", !GkConfig.INSTANCE.holdWhenHit);
+					command(client, "damage @p 3 minecraft:generic");
+				}
+				if (since == 546) {
+					hitDone = Job.tilled + Job.pathed + Job.seeded + Job.dirted;
+					check("hit with pause off: not holding (" + Job.status.getString() + ")", !Job.status.getString().startsWith("Holding"));
+				}
+				// Every tick after the hit: never holding. Progress counts blocks, or unpacking a shulker box (it may be mid-unpack).
+				if (since > 540 && since < 590 && Job.status.getString().startsWith("Holding")) heldAfterHit = true;
+				if (since == 541) hitState = Job.state;
+				if (since == 590) check("hit with pause off: kept working, never held (" + hitDone + " -> " + (Job.tilled + Job.pathed + Job.seeded + Job.dirted)
+								+ ", " + hitState + " -> " + Job.state + ", held " + heldAfterHit + ")",
+						!heldAfterHit && (Job.tilled + Job.pathed + Job.seeded + Job.dirted > hitDone || hitState == Job.State.UNPACK));
+				// With it on: it lets go of the keys and the camera (for kill aura), then carries on 3 seconds after.
+				if (since == 598) GkConfig.INSTANCE.holdWhenHit = true;
 				if (since == 600) command(client, "damage @p 3 minecraft:generic");
 				if (since == 606) {
 					hitYaw = client.player.getYaw();
@@ -165,7 +183,10 @@ final class SelfTest {
 							client.player.getYaw() == hitYaw && !client.options.forwardKey.isPressed() && !client.options.jumpKey.isPressed()
 									&& Job.tilled + Job.pathed + Job.seeded + Job.dirted == hitDone);
 				}
-				if (since == 720) check("hit: carried on after 3 seconds (" + Job.status.getString() + ")", !Job.status.getString().startsWith("Holding"));
+				if (since == 720) {
+					check("hit: carried on after 3 seconds (" + Job.status.getString() + ")", !Job.status.getString().startsWith("Holding"));
+					GkConfig.INSTANCE.holdWhenHit = false;
+				}
 				// Numpad 2 pauses, Numpad 1 carries on.
 				if (since == 1000) Job.togglePause(client);
 				if (since == 1005) hitDone = Job.tilled + Job.pathed + Job.seeded + Job.dirted;
@@ -245,14 +266,20 @@ final class SelfTest {
 					command(client, "give @p minecraft:diamond_shovel");
 					command(client, "give @p minecraft:mycelium 64");
 				}
+				// The swap-hands key (F) pressed by mistake: the hoe lands in the off hand. It must still find it.
+				if (since == 34) {
+					inv.setSelectedSlot(0);
+					client.interactionManager.clickSlot(client.player.playerScreenHandler.syncId, 36, 40, net.minecraft.screen.slot.SlotActionType.SWAP, client.player);
+				}
 				if (since == 40) {
+					boolean offHand = hoe.test(client.player.getOffHandStack());
 					Selection.set(client, client.player, new BlockPos(60, GROUND, 0), 4);
 					Job.start(client, Plan.make(client.world, Selection.center, Selection.radius, true));
-					check("started a job with a hoe 3 uses from the reserve", Job.running());
+					check("started a job with a hoe 3 uses from the reserve, sitting in the off hand (" + offHand + ")", Job.running() && offHand);
 				}
 				if (since > 40 && (!Job.running() || since > 40 + 20 * 60)) {
 					int left = -1;
-					for (int i = 0; i < 36; i++) if (hoe.test(inv.getStack(i))) left = inv.getStack(i).getMaxDamage() - inv.getStack(i).getDamage();
+					for (int i : Job.TOOL_SLOTS) if (hoe.test(inv.getStack(i))) left = inv.getStack(i).getMaxDamage() - inv.getStack(i).getDamage();
 					check("stopped with the hoe kept at 10 uses, ready to mend (" + left + " left, tilled " + Job.tilled + ": " + Job.stopReason + ")",
 							!Job.running() && left == 10 && Job.tilled == 3 && Job.stopReason.contains("mend"));
 					if (Job.running()) Job.stop(client, "test over");

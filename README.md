@@ -48,8 +48,10 @@ have, what's missing). In the world you see the ring, **purple** dots where seed
 get at. The keys can be changed in Controls, where there are also two unbound ones: the panel, and walking the circle
 out (press it in the middle, walk to the edge, press it again).
 
-**When you're hit** it lets go of the keys, the camera and the block it's breaking, so your other mods (kill aura) can
-fight. It carries on 3 seconds after the last hit, once no hostile mob or other player is within 6 blocks.
+**Pause when hit** (off by default, `/gk hitpause true` or **Hit pause** on the panel): when you're hit it lets go of
+the keys, the camera and the block it's breaking, so your other mods (kill aura) can fight. It carries on 3 seconds after
+the last hit, once no hostile mob or other player is within 6 blocks. Off, it keeps working when hit. Either way it
+holds off at low health (`/gk minhealth`).
 
 On low health it holds off the same way until you're back above it. It stops when you die or disconnect, and waits while you have a screen open.
 
@@ -80,7 +82,7 @@ While a job runs it looks after you, without a bed:
   `work`: carries on. `stop`: stops.
 - **Danger, any time:** it hides in a bunker from a warden, a crowd of monsters, or players: `/gk players naughty`
   (default: your Naughty and Look Into lists in Naughty or Nice), `strangers` (anyone not a friend or on your Nice
-  list) or `off`. It runs from a lit creeper. Being hit still hands over to your kill aura as before.
+  list) or `off`. It runs from a lit creeper. With pause when hit on, being hit hands over to your kill aura.
 - **Eats** when hungry (`/gk eat`), good food first and never rotten flesh, spider eyes, raw chicken, chorus fruit or
   golden apples; looks at the sky while eating so it doesn't plant carrots in the farmland. **Totem** into an empty off
   hand (`/gk totem`). Warns when armour is nearly worn out.
@@ -100,6 +102,7 @@ The panel has buttons for all of this.
 | `/gk flowers <true\|false>` | break flowers on grass (default true) |
 | `/gk watch <true\|false>` | stay and watch it spread afterwards (default true) |
 | `/gk minhealth <n>` | hold off at or below this health (default 10, 5 hearts) |
+| `/gk hitpause <true\|false>` | hold off for 3 seconds when hit, for kill aura (default false) |
 | `/gk tools <on\|off>` / `reserve <2-500>` | tool guard: put tools aside before they break, to mend (default on, 10 uses) |
 | `/gk swap <from> <to>` / `off` | any block to any other block (exposed tops only), e.g. `/gk swap sand red_sand` |
 
@@ -112,13 +115,15 @@ The panel has buttons for all of this.
 - **Tool guard** (on by default): it puts a hoe, shovel or pickaxe aside when it's down to 10 uses, so you can mend it
   instead of losing it. It moves on to another one if you carry one, else it stops and tells you which tool needs
   mending. `/gk tools reserve <n>` keeps more or fewer uses back; `/gk tools off` uses tools until they break.
+- A hoe or shovel that ends up in your off hand (the swap-hands key pressed by mistake) is swapped back and used.
 - Check the server's rules on automation before using it on a server.
 
 ## Developing
 `./gradlew build` builds the jar. `./gradlew runSelfTest` builds a mini mountain in a test world (a plateau, a spike,
 an overhang, a pond, a sapling and glass on grass), runs the job in survival, then speeds up random ticks 100x and
 checks the circle ends up all mycelium with no grass getting in. The map also has a waterfall and a 2-deep pond, and it
-checks the walker doesn't get stuck. It also hits the player and pauses the job, to check it lets go and carries on.
+checks the walker doesn't get stuck. It also hits the player with pause when hit off (it keeps working) and on (it lets go, then carries on), and
+pauses the job with Numpad 2.
 Then the tool guard: a nearly worn hoe is refused, and a job stops with the hoe kept at exactly 10 uses.
 
 `./gradlew runAreaTest` does the big-area side for real on a flat world: a 48 × 32 area with a cut-out, in 16-block

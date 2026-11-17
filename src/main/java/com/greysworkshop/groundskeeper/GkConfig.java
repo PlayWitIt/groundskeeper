@@ -63,6 +63,8 @@ final class GkConfig {
 	boolean autoEat = true;
 	/** Keep a totem in an empty off hand. */
 	boolean totem = true;
+	/** Hold off for 3 seconds after being hit (keys and camera left alone, for kill aura). Off: it keeps working. */
+	boolean holdWhenHit = false;
 	/** Tool guard: put a tool aside with {@link #toolReserve} uses left, so it can be mended instead of breaking. */
 	boolean protectTools = true;
 	/** Uses a tool keeps when the tool guard is on (at least 2: one use can cost a sword 2). */

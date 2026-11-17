@@ -329,9 +329,10 @@ final class Job {
 			stop(client, "Stopped: you died.");
 			return;
 		}
-		// Hit: hold off for 3 seconds after the last hit, and while an enemy is still close.
+		// Hit (only with "pause when hit" on): hold off for 3 seconds after the last hit, and while an enemy is still close.
 		float hp = p.getHealth();
-		if (p.hurtTime > 0 || lastHealth >= 0 && hp < lastHealth) fightUntil = ticks + 60;
+		if (!GkConfig.INSTANCE.holdWhenHit) fightUntil = 0;
+		else if (p.hurtTime > 0 || lastHealth >= 0 && hp < lastHealth) fightUntil = ticks + 60;
 		lastHealth = hp;
 		boolean low = hp <= GkConfig.INSTANCE.minHealth;
 		if (ticks < fightUntil && enemyNear(p, w)) fightUntil = Math.max(fightUntil, ticks + 20);
@@ -1020,7 +1021,7 @@ final class Job {
 		float speed = 1;
 		// Grass to be swapped for dirt: silk touch would drop grass, not the dirt the next swap needs.
 		boolean wantDrop = s.isOf(Blocks.GRASS_BLOCK) && current != null && current.kind == Plan.Kind.DIRT;
-		for (int i = 0; i < PlayerInventory.MAIN_SIZE; i++) {
+		for (int i : TOOL_SLOTS) {
 			ItemStack st = inv.getStack(i);
 			if (st.isEmpty() || !safe(st)) continue;
 			if (wantDrop && silk(st)) continue;
@@ -1070,7 +1071,7 @@ final class Job {
 	/** Why there's no usable tool of this kind when you have one: it's been put aside to mend. Empty if not that. */
 	static String asideNote(PlayerInventory inv, Predicate<ItemStack> what, String name) {
 		int most = -1;
-		for (int i = 0; i < PlayerInventory.MAIN_SIZE; i++) {
+		for (int i : TOOL_SLOTS) {
 			ItemStack s = inv.getStack(i);
 			if (s.isEmpty() || !what.test(s) || safe(s)) continue;
 			most = Math.max(most, s.getMaxDamage() - s.getDamage());
@@ -1084,7 +1085,7 @@ final class Job {
 	/** Uses left in all the safe tools matching {@code what} (Unbreaking makes them last longer than this). */
 	static int uses(PlayerInventory inv, Predicate<ItemStack> what) {
 		int n = 0;
-		for (int i = 0; i < PlayerInventory.MAIN_SIZE; i++) {
+		for (int i : TOOL_SLOTS) {
 			ItemStack s = inv.getStack(i);
 			if (s.isEmpty() || !what.test(s) || !safe(s)) continue;
 			n += s.isDamageable() ? s.getMaxDamage() - s.getDamage() - reserve() : 100_000;
@@ -1109,7 +1110,7 @@ final class Job {
 	static int best(PlayerInventory inv, Predicate<ItemStack> what) {
 		int best = -1;
 		int left = -1;
-		for (int i = 0; i < PlayerInventory.MAIN_SIZE; i++) {
+		for (int i : TOOL_SLOTS) {
 			ItemStack s = inv.getStack(i);
 			if (s.isEmpty() || !what.test(s) || !safe(s)) continue;
 			int l = s.isDamageable() ? s.getMaxDamage() - s.getDamage() : Integer.MAX_VALUE;
@@ -1129,10 +1130,19 @@ final class Job {
 		return what.test(p.getMainHandStack());
 	}
 
+	/** Where it looks for tools: the main inventory and the off hand (a tool can land there from the swap-hands key). */
+	static final int[] TOOL_SLOTS = java.util.stream.IntStream.concat(java.util.stream.IntStream.range(0, PlayerInventory.MAIN_SIZE),
+			java.util.stream.IntStream.of(PlayerInventory.OFF_HAND_SLOT)).toArray();
+
 	/** Puts inventory slot {@code slot} in hand, swapping it into the hotbar if need be. */
 	static void select(MinecraftClient client, ClientPlayerEntity p, int slot) {
 		PlayerInventory inv = p.getInventory();
 		if (slot < 0) return;
+		if (slot == PlayerInventory.OFF_HAND_SLOT) {
+			// Swap hands back: the tool into the hand, and what's in the hand (a totem, often) into the off hand.
+			client.interactionManager.clickSlot(p.playerScreenHandler.syncId, 36 + inv.getSelectedSlot(), PlayerInventory.OFF_HAND_SLOT, SlotActionType.SWAP, p);
+			return;
+		}
 		if (slot < PlayerInventory.getHotbarSize()) {
 			inv.setSelectedSlot(slot);
 			return;
