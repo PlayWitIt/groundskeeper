@@ -36,9 +36,20 @@ java {
 	targetCompatibility = JavaVersion.VERSION_21
 }
 
+// CoreCheck is a plain main() check of the game-free parts, not JUnit; run it as part of the build.
+tasks.register('coreCheck', JavaExec) {
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.greysworkshop.groundskeeper.CoreCheck'
+}
+tasks.named('test') {
+	failOnNoDiscoveredTests = false
+	dependsOn 'coreCheck'
+}
+
 // The scripted self-test is for development only.
 jar {
 	exclude 'com/greysworkshop/groundskeeper/SelfTest*'
+	exclude 'com/greysworkshop/groundskeeper/AreaTest*'
 }
 
 loom {
@@ -47,6 +58,12 @@ loom {
 			client()
 			name = "Self Test"
 			vmArgs "-Dgroundskeeper.selftest=true", "-Dgroundskeeper.debug=true", "-Xmx1536m"
+			runDir "run"
+		}
+		areaTest {
+			client()
+			name = "Area Test"
+			vmArgs "-Dgroundskeeper.selftest=area", "-Dgroundskeeper.debug=true", "-Xmx1536m"
 			runDir "run"
 		}
 	}
