@@ -56,7 +56,8 @@ On low health it holds off the same way until you're back above it. It stops whe
 ## Big areas (0.3.0)
 Any size and shape, up to 16,000 × 16,000 blocks, worked a tile at a time over as many sessions and days as it takes.
 
-- **Make the area:** `/gk area map` draws it on Base Insurance's map (needs Base Insurance 1.19.0 or later; coming next),
+- **Make the area:** `/gk area map` draws it on Base Insurance's map (needs Base Insurance 1.19.0 or later): rectangles, circles, polygons and brush
+  strokes, added or cut out, with the size as you draw and the tiles' progress shown in purple;
   or build it from shapes: `/gk area add rect <x1> <z1> <x2> <z2>`, `add circle <r>`, `add ellipse <rx> <rz>`,
   `add square <half>` (around you), and the same with `cut` for holes (your base, a farm). `/gk area undo`, `/gk area clear`.
   `/gk area` shows its size, the tiles, and what it will take (mycelium, hoe uses, hours).
@@ -116,5 +117,10 @@ an overhang, a pond, a sapling and glass on grass), runs the job in survival, th
 checks the circle ends up all mycelium with no grass getting in. The map also has a waterfall and a 2-deep pond, and it
 checks the walker doesn't get stuck. It also hits the player and pauses the job, to check it lets go and carries on.
 
-The plain-Java parts (area shapes, tiles, seams, day and night, threats, bunker spots) have their own check that runs
-without the game: see `src/test/java/.../CoreCheck.java` for the two commands (needs only Gson).
+`./gradlew runAreaTest` does the big-area side for real on a flat world: a 48 × 32 area with a cut-out, in 16-block
+tiles; seams between worked and unworked tiles; progress read back from the file as after a restart; eating and the
+totem; digging in at night and climbing out in the morning; hiding from a warden; running from a lit creeper; then
+every tile all mycelium, the cut-out untouched and no seams left.
+
+The plain-Java parts (area shapes, tiles, seams, day and night, threats, bunker spots) are checked without the game as
+part of `./gradlew build` (CoreCheck, 51 checks).

@@ -73,6 +73,11 @@ final class Shelter {
 		return mode != Mode.NONE;
 	}
 
+	/** The block the shelter is dug under (its roof), or null. */
+	static BlockPos ground() {
+		return ground;
+	}
+
 	static void reset() {
 		mode = Mode.NONE;
 		ground = null;

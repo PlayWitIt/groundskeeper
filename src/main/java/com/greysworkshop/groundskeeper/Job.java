@@ -115,7 +115,6 @@ final class Job {
 				e -> e != p && e.isAlive() && (e instanceof net.minecraft.entity.mob.Monster || e instanceof net.minecraft.entity.player.PlayerEntity)).isEmpty();
 	}
 
-	/** Lets go of everything (keys, camera, the block being broken) so other mods can fight. */
 	/** The shelter takes over: let go of the work (it carries on from the same block afterwards). */
 	static void pauseForShelter(MinecraftClient client) {
 		release(client);
@@ -137,6 +136,7 @@ final class Job {
 		breaking = null;
 	}
 
+	/** Lets go of everything (keys, camera, the block being broken) so other mods can fight. */
 	private static void hold(MinecraftClient client, ClientPlayerEntity p, Text why) {
 		if (!holding) {
 			holding = true;

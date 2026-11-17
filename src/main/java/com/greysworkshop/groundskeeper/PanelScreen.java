@@ -32,7 +32,10 @@ final class PanelScreen extends Screen {
 
 	@Override
 	protected void init() {
-		int x = (width - W) / 2, y = 34;
+		// Short screens (854 × 480 at GUI scale 2 is 240 tall): tighter rows, Done up by the title.
+		boolean compact = height < 300;
+		int step = compact ? 22 : 24, gap = compact ? 22 : 30;
+		int x = (width - W) / 2, y = compact ? 28 : 34;
 		int half = (W - 4) / 2;
 		GkConfig cf = GkConfig.INSTANCE;
 		addDrawableChild(slider(x, y, half, 2, 160, radius, v -> radius = v, v -> "Radius: " + v,
@@ -45,7 +48,7 @@ final class PanelScreen extends Screen {
 		}).dimensions(x + half + 4, y, half, 20).tooltip(Tooltip.of(Text.literal(
 				"You're the middle. It plans the job and shows it in the world: the ring, purple dots where seeds go, red where grass can't be reached. "
 						+ "Then Numpad 1 (or Start) starts, Numpad 2 pauses, Numpad 3 stops."))).build());
-		y += 24;
+		y += step;
 		boolean running = Job.running();
 		ButtonWidget start = ButtonWidget.builder(Text.literal(running ? "Stop" : "Start"), b -> {
 			MinecraftClient c = MinecraftClient.getInstance();
@@ -64,7 +67,7 @@ final class PanelScreen extends Screen {
 		}).dimensions(x + half + 4, y, half, 20).build();
 		cancel.active = !running && Selection.mode != Selection.Mode.NONE;
 		addDrawableChild(cancel);
-		y += 32;
+		y += compact ? step : 32;
 		addDrawableChild(slider(x, y, half, 2, 12, cf.spacing, v -> {
 			cf.spacing = v;
 			changed();
@@ -75,7 +78,7 @@ final class PanelScreen extends Screen {
 			changed();
 		}).dimensions(x + half + 4, y, half, 20).tooltip(Tooltip.of(Text.literal(
 				"Path: the outer ring becomes dirt path, free, and grass can't spread over it. Mycelium: a ring of real mycelium. None: grass outside keeps fighting the edge."))).build());
-		y += 24;
+		y += step;
 		addDrawableChild(slider(x, y, half, 1, 20, cf.speed, v -> {
 			cf.speed = v;
 			GkConfig.save();
@@ -84,7 +87,7 @@ final class PanelScreen extends Screen {
 			cf.clearFlowers = v;
 			changed();
 		}, "On: flowers on grass are broken (they drop). Off: that grass is left alone."));
-		y += 24;
+		y += step;
 		addDrawableChild(toggle(x, y, half, "Watch afterwards", () -> cf.watch, v -> {
 			cf.watch = v;
 			GkConfig.save();
@@ -94,7 +97,7 @@ final class PanelScreen extends Screen {
 			GkConfig.save();
 		}, "The lines at the top left while it works."));
 		// Big areas.
-		y += 30;
+		y += gap;
 		Project area = client == null ? null : Areas.get(client);
 		boolean hasArea = area != null && !area.mask.isEmpty();
 		ButtonWidget draw = ButtonWidget.builder(Text.literal(hasArea ? "Edit area on map…" : "Draw an area on the map…"), b -> {
@@ -116,7 +119,7 @@ final class PanelScreen extends Screen {
 		}).dimensions(x + half + 4, y, half, 20).tooltip(Tooltip.of(Text.literal("Works the area tile by tile and picks up where it left off next time."))).build();
 		go.active = hasArea && (!running || Areas.running());
 		addDrawableChild(go);
-		y += 24;
+		y += step;
 		addDrawableChild(ButtonWidget.builder(nightText(), b -> {
 			cf.night = GkConfig.Night.values()[(cf.night.ordinal() + 1) % GkConfig.Night.values().length];
 			b.setMessage(nightText());
@@ -131,7 +134,7 @@ final class PanelScreen extends Screen {
 		}).dimensions(x + half + 4, y, half, 20).tooltip(Tooltip.of(Text.literal(
 				"Who it hides from (in a bunker, until they've gone). Your lists: players on your Naughty or Look Into list in Naughty or Nice. Strangers: anyone who isn't a friend "
 						+ "or on your Nice list. Nobody: leaves players to you. It always hides from a warden or a crowd of monsters, and runs from a lit creeper."))).build());
-		y += 24;
+		y += step;
 		addDrawableChild(ButtonWidget.builder(Text.literal(cf.zoneSet ? "Safety zone: move it here" : "Set safety zone here"), b -> {
 			MinecraftClient c = MinecraftClient.getInstance();
 			if (c.player == null || c.world == null) return;
@@ -151,18 +154,31 @@ final class PanelScreen extends Screen {
 			GkConfig.save();
 		}, "Good food first; never rotten flesh, spider eyes, raw chicken, chorus fruit or golden apples. It also keeps a totem in an empty off hand (/gk totem)."));
 		if (cf.swapMode()) {
-			y += 24;
+			y += step;
 			addDrawableChild(ButtonWidget.builder(Text.literal("Swap mode on: " + cf.swapFrom + " → " + cf.swapTo + " (click: back to mycelium)"), b -> {
 				cf.swapFrom = cf.swapTo = "";
 				changed();
 				clearAndInit();
 			}).dimensions(x, y, W, 20).build());
 		}
-		textTop = y + 30;
-		addDrawableChild(ButtonWidget.builder(Text.literal("Done"), b -> close()).dimensions(width / 2 - 50, height - 28, 100, 20).build());
+		textTop = y + (compact ? 26 : 30);
+		textBottom = compact ? height - 4 : height - 40;
+		if (compact) addDrawableChild(ButtonWidget.builder(Text.literal("Done"), b -> close()).dimensions(width - 56, 4, 50, 20).build());
+		else addDrawableChild(ButtonWidget.builder(Text.literal("Done"), b -> close()).dimensions(width / 2 - 50, height - 28, 100, 20).build());
 	}
 
-	private int textTop;
+	private int textTop, textBottom;
+
+	/** For the self-test: no two buttons overlap and all are on screen. */
+	boolean fits() {
+		List<net.minecraft.client.gui.widget.ClickableWidget> all = new java.util.ArrayList<>();
+		for (var c : children()) if (c instanceof net.minecraft.client.gui.widget.ClickableWidget w) all.add(w);
+		for (var a : all) {
+			if (a.getX() < 0 || a.getY() < 0 || a.getX() + a.getWidth() > width || a.getY() + a.getHeight() > height) return false;
+			for (var b : all) if (a != b && a.getX() < b.getX() + b.getWidth() && b.getX() < a.getX() + a.getWidth() && a.getY() < b.getY() + b.getHeight() && b.getY() < a.getY() + a.getHeight()) return false;
+		}
+		return all.size() >= 15;
+	}
 
 	/** A setting that changes the plan: save it, and plan again. */
 	private void changed() {
@@ -202,7 +218,7 @@ final class PanelScreen extends Screen {
 		ctx.drawCenteredTextWithShadow(textRenderer, title, width / 2, 12, GREEN);
 		int x = (width - W) / 2, y = textTop;
 		for (Line l : lines()) {
-			if (y > height - 40) break;
+			if (y + 9 > textBottom) break;
 			ctx.drawTextWithShadow(textRenderer, Text.literal(l.text), x, y, l.color);
 			y += 11;
 		}

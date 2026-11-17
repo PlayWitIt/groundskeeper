@@ -136,6 +136,14 @@ final class SelfTest {
 					check("plan needs more than the loose mycelium (so it must unpack the box)", p.seeds() > 6);
 				}
 				if (tick == 240) screenshot(client, "1_preview");
+				// The panel at this window's size (854 × 480, GUI scale 2, as the user plays): every button on screen, none overlapping.
+				if (tick == 244) client.setScreen(new PanelScreen());
+				if (tick == 250) {
+					check("panel fits a " + client.getWindow().getScaledWidth() + " × " + client.getWindow().getScaledHeight() + " screen",
+							client.currentScreen instanceof PanelScreen ps && ps.fits());
+					screenshot(client, "0_panel");
+				}
+				if (tick == 256) client.setScreen(null);
 				if (tick == 260) {
 					Job.start(client, Plan.make(client.world, Selection.center, Selection.radius, true));
 					check("started", Job.running());

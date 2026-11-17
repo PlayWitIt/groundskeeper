@@ -104,6 +104,13 @@ final class Areas {
 		return project;
 	}
 
+	/** Drops what's in memory, so the next {@link #get} reads the file again (as after a restart). */
+	static void forget() {
+		loadedFor = null;
+		project = null;
+		tile = null;
+	}
+
 	static void save(MinecraftClient client) {
 		Path f = file(client);
 		if (f == null || project == null) return;

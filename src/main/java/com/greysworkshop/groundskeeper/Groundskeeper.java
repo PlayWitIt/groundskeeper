@@ -37,9 +37,10 @@ public final class Groundskeeper implements ClientModInitializer {
 			Job.stop(client, "Stopped: disconnected.");
 			Selection.mode = Selection.Mode.NONE;
 		}));
-		if (Boolean.getBoolean("groundskeeper.selftest")) {
+		String test = System.getProperty("groundskeeper.selftest", "");
+		if (test.equals("true") || test.equals("area")) {
 			try {
-				Class.forName("com.greysworkshop.groundskeeper.SelfTest").getDeclaredMethod("start").invoke(null);
+				Class.forName("com.greysworkshop.groundskeeper." + (test.equals("area") ? "AreaTest" : "SelfTest")).getDeclaredMethod("start").invoke(null);
 			} catch (ReflectiveOperationException e) {
 				LOGGER.error("Self-test missing", e);
 			}
