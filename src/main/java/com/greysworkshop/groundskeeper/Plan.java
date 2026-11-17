@@ -61,8 +61,10 @@ final class Plan {
 		/** How many of the block it had just before the last place. */
 		int countBefore;
 		String why = "";
-		/** Why it was made a seed: grid, slope, water. */
+		/** Why it was made a seed: grid, slope, water; "border" or "seam" for paths; "seam" for a seam being tilled back. */
 		String reason = "";
+		/** Left until everything else is done (taking a seam back up: the grass next to it has to be tilled first). */
+		boolean late;
 
 		Task(BlockPos pos, Kind kind) {
 			this.pos = pos;
@@ -74,7 +76,10 @@ final class Plan {
 	private static final int DEPTH = 48;
 
 	final BlockPos center;
+	/** The circle's radius; 0 for a tile of a big area. */
 	final int radius;
+	/** Which columns, and which of them are border, seam, or seam to take back up. */
+	final Region region;
 	final boolean swap;
 	final Block from, to;
 	final List<Task> tasks = new ArrayList<>();
@@ -88,7 +93,8 @@ final class Plan {
 	int nodes, mycelium, farmland, gridSeeds, slopeSeeds, waterSeeds, guardSeeds, stranded, maxHops, columns;
 	int minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
 
-	private Plan(BlockPos center, int radius, Block from, Block to) {
+	private Plan(Region region, BlockPos center, int radius, Block from, Block to) {
+		this.region = region;
 		this.center = center;
 		this.radius = radius;
 		this.from = from;
@@ -97,17 +103,21 @@ final class Plan {
 	}
 
 	static boolean inside(int dx, int dz, int r) {
-		return dx * dx + dz * dz <= r * r + r;
+		return Region.inCircle(dx, dz, r);
 	}
 
 	boolean inside(int x, int z) {
-		return inside(x - center.getX(), z - center.getZ(), radius);
+		return region.inside(x, z);
 	}
 
 	/** On the outer ring: one of its 8 neighbours is outside. */
 	static boolean ring(int dx, int dz, int r) {
-		for (int ox = -1; ox <= 1; ox++) for (int oz = -1; oz <= 1; oz++) if (!inside(dx + ox, dz + oz, r)) return true;
-		return false;
+		return Region.onRing(dx, dz, r);
+	}
+
+	/** A tile of a big area, rather than a circle. */
+	boolean tile() {
+		return region instanceof Region.Tile;
 	}
 
 	int seeds() {
@@ -193,13 +203,31 @@ final class Plan {
 	 * on the work) it only adds seeds where something can't be reached.
 	 */
 	static Plan make(ClientWorld w, BlockPos center, int r, boolean fresh) {
+		return make(w, new Region.Circle(center.getX(), center.getZ(), r), center, r, fresh);
+	}
+
+	/** A tile of a big area. {@code fresh}: the first time (lays out the seed grid); otherwise a check on it. */
+	static Plan make(ClientWorld w, Project project, long tile, boolean fresh) {
+		Region.Tile region = new Region.Tile(project, tile);
+		int x = region.centerX(), z = region.centerZ();
+		int y = w.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, x, z);
+		return make(w, region, new BlockPos(x, y, z), 0, fresh);
+	}
+
+	/** The same columns looked at again (to check on the work, and fix what's come back). */
+	Plan again(ClientWorld w) {
+		if (region instanceof Region.Tile t) return make(w, new Region.Tile(t.project, t.tile), center, radius, false);
+		return make(w, region, center, radius, false);
+	}
+
+	static Plan make(ClientWorld w, Region region, BlockPos center, int r, boolean fresh) {
 		GkConfig cfg = GkConfig.INSTANCE;
 		Block from = null, to = null;
 		if (cfg.swapMode()) {
 			from = block(cfg.swapFrom);
 			to = block(cfg.swapTo);
 		}
-		Plan plan = new Plan(center, r, from, to);
+		Plan plan = new Plan(region, center, r, from, to);
 		if (plan.swap) plan.scanSwap(w);
 		else plan.scan(w, cfg, fresh);
 		return plan;
@@ -207,7 +235,7 @@ final class Plan {
 
 	private void scanSwap(ClientWorld w) {
 		BlockPos.Mutable m = new BlockPos.Mutable();
-		forColumns(w, (x, z, ringCol) -> {
+		forColumns(w, (x, z, kind) -> {
 			int top = w.getTopY(Heightmap.Type.WORLD_SURFACE, x, z) - 1;
 			int bottom = Math.max(w.getBottomY(), top - DEPTH);
 			BlockState above = w.getBlockState(m.set(x, top + 1, z));
@@ -221,22 +249,24 @@ final class Plan {
 		nodes = mycelium + tasks.size();
 	}
 
+	/** What a column is: inside, on the outer edge (border), or a seam next to ground still to be worked. */
+	private static final int PLAIN = 0, EDGE = 1, SEAM = 2;
+
 	private interface ColumnJob {
-		void run(int x, int z, boolean ring);
+		void run(int x, int z, int kind);
 	}
 
 	private void forColumns(ClientWorld w, ColumnJob job) {
-		int cx = center.getX(), cz = center.getZ();
-		for (int dx = -radius; dx <= radius; dx++) {
-			for (int dz = -radius; dz <= radius; dz++) {
-				if (!inside(dx, dz, radius)) continue;
-				int x = cx + dx, z = cz + dz;
+		int[] b = region.bounds();
+		for (int x = b[0]; x <= b[2]; x++) {
+			for (int z = b[1]; z <= b[3]; z++) {
+				if (!region.inside(x, z)) continue;
 				if (!w.getChunkManager().isChunkLoaded(x >> 4, z >> 4)) {
 					unloaded.add(new BlockPos(x, center.getY(), z));
 					continue;
 				}
 				columns++;
-				job.run(x, z, ring(dx, dz, radius));
+				job.run(x, z, region.edge(x, z) ? EDGE : region.seam(x, z) ? SEAM : PLAIN);
 			}
 		}
 	}
@@ -263,8 +293,10 @@ final class Plan {
 	private void scan(ClientWorld w, GkConfig cfg, boolean fresh) {
 		GkConfig.Border border = cfg.border;
 		BlockPos.Mutable m = new BlockPos.Mutable();
-		forColumns(w, (x, z, ringCol) -> {
-			boolean ring = ringCol && border != GkConfig.Border.NONE;
+		forColumns(w, (x, z, kind) -> {
+			// Seams are always path: they're only there for a while, and mycelium there would be wasted.
+			boolean seam = kind == SEAM;
+			boolean ring = kind == EDGE && border != GkConfig.Border.NONE || seam;
 			int top = w.getTopY(Heightmap.Type.WORLD_SURFACE, x, z) - 1;
 			int bottom = Math.max(w.getBottomY(), top - DEPTH);
 			BlockState above = w.getBlockState(m.set(x, top + 1, z));
@@ -281,8 +313,8 @@ final class Plan {
 							if (grass || ring) blocked.add(p);
 							else node(p, null, false);
 						} else if (ring) {
-							Task t = new Task(p, border == GkConfig.Border.PATH ? Kind.PATH : Kind.SEED);
-							t.reason = "border";
+							Task t = new Task(p, seam || border == GkConfig.Border.PATH ? Kind.PATH : Kind.SEED);
+							t.reason = seam ? "seam" : "border";
 							add(t);
 							if (t.kind == Kind.SEED) node(p, t, false);
 						} else if (grass) {
@@ -296,6 +328,16 @@ final class Plan {
 				} else if (s.isOf(Blocks.MYCELIUM)) {
 					p = m.toImmutable();
 					node(p, null, true);
+				} else if (s.isOf(Blocks.DIRT_PATH) && region.release(m.asLong())) {
+					// A seam no longer needed: the hoe turns path into farmland, which dries into dirt like the rest.
+					p = m.toImmutable();
+					if (exposed(above)) {
+						Task t = new Task(p, Kind.TILL);
+						t.reason = "seam";
+						t.late = true;
+						add(t);
+						node(p, t, false);
+					}
 				} else if (s.isOf(Blocks.FARMLAND) && !ring) {
 					// Turning back into dirt, unless it's a farm: something planted, or watered.
 					p = m.toImmutable();
@@ -359,7 +401,7 @@ final class Plan {
 				Task t = nodeTask.get(i);
 				if (t == null || t.kind != Kind.TILL) continue;
 				BlockPos p = nodePos.get(i);
-				if (Math.floorMod(p.getX() - center.getX(), s) != 0 || Math.floorMod(p.getZ() - center.getZ(), s) != 0) continue;
+				if (Math.floorMod(p.getX() - region.gridX(), s) != 0 || Math.floorMod(p.getZ() - region.gridZ(), s) != 0) continue;
 				gridTop.merge(col(p), i, (a, b) -> nodePos.get(a).getY() >= nodePos.get(b).getY() ? a : b);
 			}
 			for (int i : gridTop.values()) {

@@ -53,6 +53,39 @@ fight. It carries on 3 seconds after the last hit, once no hostile mob or other 
 
 On low health it holds off the same way until you're back above it. It stops when you die or disconnect, and waits while you have a screen open.
 
+## Big areas (0.3.0)
+Any size and shape, up to 16,000 × 16,000 blocks, worked a tile at a time over as many sessions and days as it takes.
+
+- **Make the area:** `/gk area map` draws it on Base Insurance's map (needs Base Insurance 1.19.0 or later; coming next),
+  or build it from shapes: `/gk area add rect <x1> <z1> <x2> <z2>`, `add circle <r>`, `add ellipse <rx> <rz>`,
+  `add square <half>` (around you), and the same with `cut` for holes (your base, a farm). `/gk area undo`, `/gk area clear`.
+  `/gk area` shows its size, the tiles, and what it will take (mycelium, hoe uses, hours).
+- **Start it:** Numpad 1 (with no circle picked) or `/gk area start`. Progress is saved per server and dimension in
+  `config/groundskeeper/areas/`, so it picks up where it left off.
+- **How it goes:** tiles of 64 × 64 (`/gk area tile <chunks>`; keep them within your simulation distance) in rows,
+  back and forth. Each tile is tilled and seeded the usual way. Where a finished tile meets one still to do, its edge
+  gets a temporary dirt path (a *seam*) so grass next door can't creep in; when the next tile is worked, the hoe turns
+  the seam back into farmland and it becomes dirt like the rest. A tile that's had 15 minutes of daylight near you gets
+  checked and fixed; once every tile is worked, it stands in each unfinished one until it's all mycelium.
+- **Getting about:** its own walker for short hops; long trips go with Baritone if installed (as a Naughty or Nice trip
+  if that's installed too).
+
+## Staying alive
+While a job runs it looks after you, without a bed:
+- **At night** (and in thunderstorms), `/gk night bunker` (default): it digs a hole three deep, puts the block back
+  on top as a roof (that also keeps phantoms away), and in the morning climbs out, filling the hole behind it. It picks
+  a spot with solid walls, a safe floor and no water, sand or caves nearby. `zone`: walks to your safety zone
+  (`/gk zone set` where you stand, `/gk zone distance <n>`, default 160) and digs in if that's too far.
+  `work`: carries on. `stop`: stops.
+- **Danger, any time:** it hides in a bunker from a warden, a crowd of monsters, or players: `/gk players naughty`
+  (default: your Naughty and Look Into lists in Naughty or Nice), `strangers` (anyone not a friend or on your Nice
+  list) or `off`. It runs from a lit creeper. Being hit still hands over to your kill aura as before.
+- **Eats** when hungry (`/gk eat`), good food first and never rotten flesh, spider eyes, raw chicken, chorus fruit or
+  golden apples; looks at the sky while eating so it doesn't plant carrots in the farmland. **Totem** into an empty off
+  hand (`/gk totem`). Warns when armour is nearly worn out.
+
+The panel has buttons for all of this.
+
 ## Settings
 | | |
 |---|---|
@@ -82,3 +115,6 @@ On low health it holds off the same way until you're back above it. It stops whe
 an overhang, a pond, a sapling and glass on grass), runs the job in survival, then speeds up random ticks 100x and
 checks the circle ends up all mycelium with no grass getting in. The map also has a waterfall and a 2-deep pond, and it
 checks the walker doesn't get stuck. It also hits the player and pauses the job, to check it lets go and carries on.
+
+The plain-Java parts (area shapes, tiles, seams, day and night, threats, bunker spots) have their own check that runs
+without the game: see `src/test/java/.../CoreCheck.java` for the two commands (needs only Gson).

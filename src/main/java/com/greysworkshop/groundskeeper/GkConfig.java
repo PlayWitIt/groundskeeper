@@ -23,6 +23,18 @@ final class GkConfig {
 		NONE
 	}
 
+	/** What to do at night (and in thunderstorms) while a job runs. */
+	enum Night {
+		/** Dig a hole three deep, put the block back on top, climb out in the morning (default). */
+		BUNKER,
+		/** Go to the safety zone you set, if it's close enough; otherwise dig in. */
+		ZONE,
+		/** Keep working through the night (still hides from danger). */
+		WORK,
+		/** Stop the job. */
+		STOP
+	}
+
 	/** Blocks between mycelium seeds. Smaller spreads faster but uses more mycelium. */
 	int spacing = 5;
 	Border border = Border.PATH;
@@ -38,6 +50,19 @@ final class GkConfig {
 	/** Swap mode: any block to any block (ids), instead of the grass-to-mycelium plan. Empty: the plan. */
 	String swapFrom = "";
 	String swapTo = "";
+	/** Big areas: tiles are this many chunks across (4: 64 blocks). Keep it inside your simulation distance. */
+	int tileChunks = 4;
+	Night night = Night.BUNKER;
+	/** Who to hide from (see {@link Threat.Players}). */
+	Threat.Players players = Threat.Players.NAUGHTY;
+	boolean zoneSet;
+	int zoneX, zoneY, zoneZ;
+	String zoneDimension = "";
+	/** How far the safety zone may be for it to walk there at dusk (further: it digs in instead). */
+	int zoneDistance = 160;
+	boolean autoEat = true;
+	/** Keep a totem in an empty off hand. */
+	boolean totem = true;
 	long totalSeeds, totalBlocks;
 
 	static void load() {
@@ -56,6 +81,11 @@ final class GkConfig {
 		if (c.border == null) c.border = Border.PATH;
 		if (c.swapFrom == null) c.swapFrom = "";
 		if (c.swapTo == null) c.swapTo = "";
+		c.tileChunks = Math.max(1, Math.min(16, c.tileChunks));
+		if (c.night == null) c.night = Night.BUNKER;
+		if (c.players == null) c.players = Threat.Players.NAUGHTY;
+		if (c.zoneDimension == null) c.zoneDimension = "";
+		c.zoneDistance = Math.max(0, Math.min(10_000, c.zoneDistance));
 	}
 
 	static void save() {

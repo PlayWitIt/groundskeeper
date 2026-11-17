@@ -29,6 +29,8 @@ final class Hud {
 	static List<Text> lines(MinecraftClient client) {
 		List<Text> lines = new ArrayList<>();
 		lines.add(Text.literal("Groundskeeper · ").formatted(Formatting.DARK_GREEN).append(Job.status.copy().formatted(Formatting.WHITE)));
+		if (Areas.running() && Areas.project != null) lines.add(Text.literal("Area · " + Areas.progress(Areas.project)).formatted(Formatting.LIGHT_PURPLE));
+		if (Shelter.threat.level() == Threat.Level.CAUTION && !Shelter.active()) lines.add(Text.literal("Watching: " + Shelter.threat.reason()).formatted(Formatting.YELLOW));
 		Plan p = Job.plan;
 		if (p == null) return lines;
 		StringBuilder b = new StringBuilder();

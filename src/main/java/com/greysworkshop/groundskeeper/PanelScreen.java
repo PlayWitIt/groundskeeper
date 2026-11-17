@@ -17,8 +17,8 @@ import java.util.function.IntConsumer;
 import java.util.function.IntFunction;
 
 /**
- * The panel (numpad 3): pick the circle around where you stand, see what it will take, start and stop, and the
- * settings. O still works for picking the circle by walking it.
+ * The panel (/gk panel, or its key): pick the circle around where you stand, or a big area drawn on Base Insurance's
+ * map; see what it will take; start and stop; the settings, including what to do at night.
  */
 final class PanelScreen extends Screen {
 	private static final int W = 320, GREEN = 0xFF60D060, WHITE = 0xFFF0F0F0, GRAY = 0xFFA0A0B0, RED = 0xFFFF6060, PURPLE = 0xFFC080FF,
@@ -93,6 +93,63 @@ final class PanelScreen extends Screen {
 			cf.hud = v;
 			GkConfig.save();
 		}, "The lines at the top left while it works."));
+		// Big areas.
+		y += 30;
+		Project area = client == null ? null : Areas.get(client);
+		boolean hasArea = area != null && !area.mask.isEmpty();
+		ButtonWidget draw = ButtonWidget.builder(Text.literal(hasArea ? "Edit area on map…" : "Draw an area on the map…"), b -> {
+			close();
+			MapBridge.open(MinecraftClient.getInstance());
+		}).dimensions(x, y, half, 20).tooltip(Tooltip.of(Text.literal(MapBridge.present()
+				? "Any size and shape: rectangles, circles, polygons, a brush, and cut-outs. It's worked a tile at a time, over as many days as it takes."
+				: "Needs Base Insurance (1.19.0 or later) for the map. Without it: /gk area add rect|circle|ellipse|square ..."))).build();
+		draw.active = !running && MapBridge.present();
+		addDrawableChild(draw);
+		ButtonWidget go = ButtonWidget.builder(Text.literal(Areas.running() ? "Stop area" : "Start area"), b -> {
+			MinecraftClient c = MinecraftClient.getInstance();
+			if (Job.running()) Job.stop(c, "Stopped.");
+			else {
+				Areas.start(c);
+				if (Job.running()) close();
+			}
+			clearAndInit();
+		}).dimensions(x + half + 4, y, half, 20).tooltip(Tooltip.of(Text.literal("Works the area tile by tile and picks up where it left off next time."))).build();
+		go.active = hasArea && (!running || Areas.running());
+		addDrawableChild(go);
+		y += 24;
+		addDrawableChild(ButtonWidget.builder(nightText(), b -> {
+			cf.night = GkConfig.Night.values()[(cf.night.ordinal() + 1) % GkConfig.Night.values().length];
+			b.setMessage(nightText());
+			GkConfig.save();
+		}).dimensions(x, y, half, 20).tooltip(Tooltip.of(Text.literal(
+				"Dig in: a hole three deep with the block put back on top, out again in the morning. Safety zone: walks to the spot you set (if it's close enough), else digs in. "
+						+ "Keep working: carries on (mycelium doesn't spread at night, but tilling still gets done). Stop: stops the job."))).build());
+		addDrawableChild(ButtonWidget.builder(playersText(), b -> {
+			cf.players = Threat.Players.values()[(cf.players.ordinal() + 1) % Threat.Players.values().length];
+			b.setMessage(playersText());
+			GkConfig.save();
+		}).dimensions(x + half + 4, y, half, 20).tooltip(Tooltip.of(Text.literal(
+				"Who it hides from (in a bunker, until they've gone). Your lists: players on your Naughty or Look Into list in Naughty or Nice. Strangers: anyone who isn't a friend "
+						+ "or on your Nice list. Nobody: leaves players to you. It always hides from a warden or a crowd of monsters, and runs from a lit creeper."))).build());
+		y += 24;
+		addDrawableChild(ButtonWidget.builder(Text.literal(cf.zoneSet ? "Safety zone: move it here" : "Set safety zone here"), b -> {
+			MinecraftClient c = MinecraftClient.getInstance();
+			if (c.player == null || c.world == null) return;
+			net.minecraft.util.math.BlockPos f = Walker.feet(c.player);
+			cf.zoneSet = true;
+			cf.zoneX = f.getX();
+			cf.zoneY = f.getY();
+			cf.zoneZ = f.getZ();
+			cf.zoneDimension = Areas.dimension(c.world);
+			if (cf.night == GkConfig.Night.BUNKER) cf.night = GkConfig.Night.ZONE;
+			GkConfig.save();
+			clearAndInit();
+		}).dimensions(x, y, half, 20).tooltip(Tooltip.of(Text.literal("Stand in the shelter you built. At dusk it walks here if it's within " + cf.zoneDistance
+				+ " blocks (/gk zone distance), else it digs in where it is."))).build());
+		addDrawableChild(toggle(x + half + 4, y, half, "Eat when hungry", () -> cf.autoEat, v -> {
+			cf.autoEat = v;
+			GkConfig.save();
+		}, "Good food first; never rotten flesh, spider eyes, raw chicken, chorus fruit or golden apples. It also keeps a totem in an empty off hand (/gk totem)."));
 		if (cf.swapMode()) {
 			y += 24;
 			addDrawableChild(ButtonWidget.builder(Text.literal("Swap mode on: " + cf.swapFrom + " → " + cf.swapTo + " (click: back to mycelium)"), b -> {
@@ -112,6 +169,23 @@ final class PanelScreen extends Screen {
 		GkConfig.save();
 		MinecraftClient c = MinecraftClient.getInstance();
 		if (Selection.mode == Selection.Mode.READY && !Job.running() && c.player != null) Selection.set(c, c.player, Selection.center, Selection.radius, false);
+	}
+
+	private static Text nightText() {
+		return Text.literal("At night: " + switch (GkConfig.INSTANCE.night) {
+			case BUNKER -> "dig in";
+			case ZONE -> "safety zone";
+			case WORK -> "keep working";
+			case STOP -> "stop";
+		});
+	}
+
+	private static Text playersText() {
+		return Text.literal("Hide from: " + switch (GkConfig.INSTANCE.players) {
+			case OFF -> "nobody";
+			case NAUGHTY -> "your lists";
+			case STRANGERS -> "strangers";
+		});
 	}
 
 	private static Text borderText() {
@@ -142,8 +216,14 @@ final class PanelScreen extends Screen {
 		if (c.player == null) return out;
 		if (Job.running()) {
 			out.add(new Line("Working: " + Job.status.getString(), GREEN));
-			out.add(new Line(Job.summary() + " · " + Job.left() + " left · " + Job.plan.coverage() + "% mycelium", WHITE));
+			if (Job.plan != null) out.add(new Line(Job.summary() + " · " + Job.left() + " left · " + Job.plan.coverage() + "% mycelium", WHITE));
+			if (Areas.running() && Areas.project != null) out.add(new Line("Area: " + Areas.progress(Areas.project), PURPLE));
+			if (Shelter.active()) out.add(new Line("Sheltering: " + Shelter.why, YELLOW));
 			return out;
+		}
+		if (Areas.project != null && !Areas.project.mask.isEmpty()) {
+			Project a = Areas.project;
+			out.add(new Line(String.format(java.util.Locale.ROOT, "Area: %,d blocks² (%s) · %s", a.selectedColumns(), Areas.size(a.selectedColumns()), Areas.progress(a)), PURPLE));
 		}
 		Plan p = Selection.mode == Selection.Mode.READY ? Selection.preview : null;
 		if (p == null) {

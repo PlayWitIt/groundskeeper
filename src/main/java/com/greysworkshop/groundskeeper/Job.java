@@ -43,7 +43,9 @@ import java.util.function.Predicate;
  */
 final class Job {
 	enum State {
-		OFF, WORK, UNPACK, ROAM, WATCH
+		OFF, WORK, UNPACK, ROAM, WATCH,
+		/** A big area: on the way to the next tile. */
+		TRAVEL
 	}
 
 	static State state = State.OFF;
@@ -55,7 +57,9 @@ final class Job {
 	/** Blocks it gave up on (can't reach, server won't change them), with why. Not tried again this job. */
 	static final java.util.Map<BlockPos, String> failed = new java.util.LinkedHashMap<>();
 
-	private static final Walker walker = new Walker();
+	static final Walker walker = new Walker();
+	/** Where TRAVEL is headed. */
+	private static int travelX, travelZ;
 	private static Plan.Task current, resume;
 	private static int wait, tries, cool, breakTicks, reachTries, ticks, watchTimer, stage, stageTicks;
 	private static BlockPos breaking, walkingTo, box;
@@ -84,6 +88,12 @@ final class Job {
 			if (paused) togglePause(client);
 			return;
 		}
+		// A big area here and no circle picked: carry on with the area.
+		Project area = Areas.get(client);
+		if (Selection.mode != Selection.Mode.READY && area != null && !area.mask.isEmpty()) {
+			Areas.start(client);
+			return;
+		}
 		if (Selection.mode != Selection.Mode.READY) {
 			Selection.set(client, p, Walker.feet(p).down(), PanelScreen.radius);
 		}
@@ -106,6 +116,27 @@ final class Job {
 	}
 
 	/** Lets go of everything (keys, camera, the block being broken) so other mods can fight. */
+	/** The shelter takes over: let go of the work (it carries on from the same block afterwards). */
+	static void pauseForShelter(MinecraftClient client) {
+		release(client);
+		wait = tries = reachTries = 0;
+		if (state == State.UNPACK && stage == 3 && client.player != null && client.player.currentScreenHandler != client.player.playerScreenHandler) {
+			client.player.closeHandledScreen();
+			stage = 2;
+		}
+	}
+
+	static void resumeAfterShelter() {
+		wait = tries = reachTries = 0;
+		walkingTo = null;
+		status = Text.literal("Working");
+	}
+
+	static void cancelBreaking(MinecraftClient client) {
+		if (breaking != null && client.interactionManager != null) client.interactionManager.cancelBlockBreaking();
+		breaking = null;
+	}
+
 	private static void hold(MinecraftClient client, ClientPlayerEntity p, Text why) {
 		if (!holding) {
 			holding = true;
@@ -144,12 +175,15 @@ final class Job {
 		startedAt = System.currentTimeMillis();
 		atCenter = false;
 		stopReason = "";
+		Shelter.reset();
+		Survival.reset(client);
+		if (!p.tile()) Areas.tile = null;
 		enter(State.WORK);
 		int have = itemCount(inv, placeItem()), need = p.seeds();
 		if (have < need) {
 			chat(player, Text.literal("You have " + have + " " + placeName() + " for " + need + " blocks: it will stop when it runs out.").formatted(Formatting.YELLOW));
 		}
-		chat(player, Text.literal("Started. Press O to stop.").formatted(Formatting.GREEN));
+		chat(player, Text.literal("Started. Numpad 2 pauses, Numpad 3 stops.").formatted(Formatting.GREEN));
 		status = Text.literal("Working");
 	}
 
@@ -165,6 +199,72 @@ final class Job {
 		return null;
 	}
 
+	/** A big area: walks to its next tile ({@link Areas} picked it), then plans and works it. */
+	static void startArea(MinecraftClient client, int x, int z) {
+		ClientPlayerEntity player = client.player;
+		if (player == null || running()) return;
+		PlayerInventory inv = player.getInventory();
+		String missing = null;
+		if (GkConfig.INSTANCE.swapMode()) missing = "Swap mode is on: big areas are grass to mycelium only (/gk swap off).";
+		else if (best(inv, s -> s.isIn(ItemTags.HOES)) < 0) missing = "Needs a hoe (any hoe) for the grass. " + toolNote(inv, ItemTags.HOES);
+		else if (best(inv, s -> s.isIn(ItemTags.SHOVELS)) < 0) missing = "Needs a shovel: big areas have a path border and seams between tiles. " + toolNote(inv, ItemTags.SHOVELS);
+		else if (itemCount(inv, Items.MYCELIUM) == 0) missing = "No mycelium in your inventory (or in a shulker box in it).";
+		if (missing != null) {
+			stopReason = missing;
+			Areas.tile = null;
+			chat(player, Text.literal(missing).formatted(Formatting.RED));
+			return;
+		}
+		plan = null;
+		tilled = seeded = pathed = swapped = cleared = passes = unpacked = dirted = 0;
+		failed.clear();
+		reachFails.clear();
+		paused = holding = false;
+		startCount = -1;
+		fightUntil = 0;
+		lastHealth = -1;
+		farmlandSeen.clear();
+		startedAt = System.currentTimeMillis();
+		stopReason = "";
+		Shelter.reset();
+		Survival.reset(client);
+		Selection.mode = Selection.Mode.NONE;
+		travelTo(x, z);
+		chat(player, Text.literal("Area started: " + Areas.progress(Areas.project) + ". Numpad 2 pauses, Numpad 3 stops; it picks up where it left off next time.")
+				.formatted(Formatting.GREEN));
+	}
+
+	/** On to another tile of the area. */
+	static void travelTo(int x, int z) {
+		travelX = x;
+		travelZ = z;
+		enter(State.TRAVEL);
+		status = Text.literal("Walking to the next part of the area");
+	}
+
+	private static void travel(MinecraftClient client, ClientPlayerEntity p, ClientWorld w) {
+		double d = Math.hypot(travelX + 0.5 - p.getX(), travelZ + 0.5 - p.getZ());
+		status = Text.literal(String.format(java.util.Locale.ROOT, "Walking to %s %s (%,d blocks)", Areas.doing == Areas.Doing.WORK ? "the next tile" : "a tile to "
+				+ (Areas.doing == Areas.Doing.CHECK ? "check" : "watch"), Areas.tile == null ? "" : Project.name(Areas.tile), Math.round(d)));
+		switch (Travel.tick(client, p, w, walker, travelX, travelZ, 12)) {
+			case ARRIVED -> {
+				Plan next = Areas.arrived(client, p, w);
+				// Null: nothing to do there, and it's already sent the job on (or stopped it).
+				if (next == null) return;
+				plan = next;
+				passes = 0;
+				startCount = -1;
+				if (Areas.doing == Areas.Doing.WATCH) {
+					watchTimer = 0;
+					atCenter = false;
+					enter(State.WATCH);
+				} else enter(State.WORK);
+			}
+			case FAILED -> Areas.skip(client, p, "couldn't walk there");
+			default -> {}
+		}
+	}
+
 	private static String toolNote(PlayerInventory inv, net.minecraft.registry.tag.TagKey<Item> tag) {
 		for (int i = 0; i < PlayerInventory.MAIN_SIZE; i++) if (inv.getStack(i).isIn(tag)) return "(Yours is about to break: it won't use it.)";
 		return "";
@@ -175,6 +275,10 @@ final class Job {
 		state = State.OFF;
 		stopReason = why;
 		release(client);
+		Survival.reset(client);
+		if (Shelter.active()) walker.placeUnder = c -> false;
+		Shelter.reset();
+		Areas.stopped(client);
 		ClientPlayerEntity p = client.player;
 		if (p != null) {
 			if (p.currentScreenHandler != p.playerScreenHandler) p.closeHandledScreen();
@@ -197,6 +301,7 @@ final class Job {
 	}
 
 	private static void release(MinecraftClient client) {
+		Travel.cancel(client, walker);
 		walker.clear(client);
 		walkingTo = null;
 		if (breaking != null && client.interactionManager != null) client.interactionManager.cancelBlockBreaking();
@@ -248,12 +353,21 @@ final class Job {
 			walker.stop(client);
 			return;
 		}
+		Areas.tick(client, p, w);
+		// Not in the middle of emptying a shulker box (its screen is open).
+		if (state != State.UNPACK || stage < 2 || stage > 3) {
+			if (!Shelter.active() || Shelter.mode == Shelter.Mode.INSIDE || Shelter.mode == Shelter.Mode.AT_ZONE || Shelter.mode == Shelter.Mode.EXPOSED) {
+				if (Survival.tick(client, p)) return;
+			}
+			if (Shelter.tick(client, p, w)) return;
+		}
 		if (cool > 0) cool--;
 		switch (state) {
 			case WORK -> work(client, p, w);
 			case UNPACK -> unpack(client, p, w);
 			case ROAM -> roam(client, p, w);
 			case WATCH -> watch(client, p, w);
+			case TRAVEL -> travel(client, p, w);
 			default -> {}
 		}
 	}
@@ -277,6 +391,7 @@ final class Job {
 		if (!isTarget(t, s)) {
 			// Changed by itself (someone else, a mob, a tree growing): not ours to do any more.
 			t.done = true;
+			if ("seam".equals(t.reason) && t.kind != Plan.Kind.PATH && !s.isOf(Blocks.DIRT_PATH)) Areas.seam(t.pos.asLong(), false);
 			return;
 		}
 		boolean replace = t.kind == Plan.Kind.SEED || t.kind == Plan.Kind.SWAP || t.kind == Plan.Kind.DIRT;
@@ -332,11 +447,11 @@ final class Job {
 
 	private static boolean isTarget(Plan.Task t, BlockState s) {
 		return switch (t.kind) {
-			case TILL -> s.isOf(Blocks.GRASS_BLOCK);
+			case TILL -> s.isOf(Blocks.GRASS_BLOCK) || "seam".equals(t.reason) && s.isOf(Blocks.DIRT_PATH);
 			case PATH -> s.isOf(Blocks.GRASS_BLOCK) || s.isOf(Blocks.DIRT);
 			case SEED -> s.isOf(Blocks.GRASS_BLOCK) || s.isOf(Blocks.DIRT) || s.isOf(Blocks.FARMLAND) || s.isAir();
 			case SWAP -> s.isOf(plan.from) || s.isAir();
-			case DIRT -> s.isOf(Blocks.GRASS_BLOCK) || s.isOf(Blocks.FARMLAND) || s.isAir();
+			case DIRT -> s.isOf(Blocks.GRASS_BLOCK) || s.isOf(Blocks.FARMLAND) || s.isAir() || "seam".equals(t.reason) && s.isOf(Blocks.DIRT_PATH);
 		};
 	}
 
@@ -344,6 +459,7 @@ final class Job {
 		t.done = true;
 		if (t.placed && MinecraftClient.getInstance().player != null)
 			log("done {} {} placedMycelium={} block={} myc={}", t.kind, t.pos.toShortString(), t.placedMycelium, s.getBlock(), itemCount(MinecraftClient.getInstance().player.getInventory(), placeItem()));
+		if ("seam".equals(t.reason)) Areas.seam(t.pos.asLong(), t.kind == Plan.Kind.PATH);
 		switch (t.kind) {
 			case TILL -> tilled++;
 			case PATH -> pathed++;
@@ -403,8 +519,11 @@ final class Job {
 		Vec3d eye = p.getEyePos();
 		Plan.Task best = null;
 		double bestD = Double.MAX_VALUE;
+		// Seams are taken back up last: the grass next to them has to be tilled first, or it would spread over.
+		boolean early = false;
+		for (Plan.Task t : plan.tasks) if (!t.done && !t.failed && !t.late) early = true;
 		for (Plan.Task t : plan.tasks) {
-			if (t.done || t.failed) continue;
+			if (t.done || t.failed || early && t.late) continue;
 			double d = eye.squaredDistanceTo(Vec3d.ofCenter(t.pos));
 			if (d < bestD) {
 				bestD = d;
@@ -417,7 +536,16 @@ final class Job {
 	/** Right-click the top of the block with a tool, then wait for the server to change it. */
 	private static void use(MinecraftClient client, ClientPlayerEntity p, ClientWorld w, Plan.Task t, Predicate<ItemStack> tool, String name) {
 		if (wait > 0) {
-			if (--wait == 0 && ++tries >= 3) fail(t, "the server didn't change it");
+			if (--wait == 0 && ++tries >= 3) {
+				if (t.kind == Plan.Kind.TILL && "seam".equals(t.reason)) {
+					// The hoe won't turn this path back: break it and put dirt in instead.
+					t.kind = Plan.Kind.DIRT;
+					tries = stage = 0;
+					log("seam at {} won't till: swapping it for dirt", t.pos.toShortString());
+					return;
+				}
+				fail(t, "the server didn't change it");
+			}
 			return;
 		}
 		if (!hold(client, p, tool)) {
@@ -480,7 +608,7 @@ final class Job {
 	/** Out of work: look at the circle again. */
 	private static void lookAgain(MinecraftClient client, ClientPlayerEntity p, ClientWorld w) {
 		passes++;
-		Plan next = Plan.make(w, plan.center, plan.radius, false);
+		Plan next = plan.again(w);
 		for (Plan.Task t : next.tasks) {
 			String why = failed.get(t.pos);
 			// Couldn't walk there: the ground around it has changed since, so try again (3 goes in all).
@@ -504,11 +632,16 @@ final class Job {
 			enter(State.ROAM);
 			return;
 		}
+		if (next.tile()) {
+			// A tile of a big area: on to the next part (it comes back to this one once it's had time to spread).
+			Areas.finished(client, p, next);
+			return;
+		}
 		if (!GkConfig.INSTANCE.watch) {
 			stop(client, "Done: " + summary() + ". It will spread by itself while you're nearby.");
 			return;
 		}
-		chat(p, Text.literal("Work done: " + summary() + ". Now watching it spread (press O to stop).").formatted(Formatting.GREEN));
+		chat(p, Text.literal("Work done: " + summary() + ". Now watching it spread (Numpad 3 stops).").formatted(Formatting.GREEN));
 		watchTimer = 0;
 		atCenter = false;
 		enter(State.WATCH);
@@ -528,6 +661,7 @@ final class Job {
 
 	static int left() {
 		int n = 0;
+		if (plan == null) return 0;
 		for (Plan.Task t : plan.tasks) if (!t.done && !t.failed) n++;
 		return n;
 	}
@@ -572,7 +706,7 @@ final class Job {
 		}
 		if (watchTimer-- > 0) return;
 		watchTimer = 600;
-		Plan next = Plan.make(w, plan.center, plan.radius, false);
+		Plan next = plan.again(w);
 		for (Plan.Task t : next.tasks) {
 			if (CANT_REACH.equals(failed.get(t.pos)) && reachFails.merge(t.pos, 1, Integer::sum) < 3) failed.remove(t.pos);
 			if (failed.containsKey(t.pos)) t.failed = true;
@@ -603,6 +737,10 @@ final class Job {
 			return;
 		}
 		if (next.farmland == 0 && next.mycelium >= next.nodes - next.stranded) {
+			if (next.tile()) {
+				Areas.finished(client, p, next);
+				return;
+			}
 			stop(client, "Done: the circle is all mycelium" + (next.blocked.isEmpty() ? "" : " (apart from " + next.blocked.size() + (next.blocked.size() == 1 ? " block" : " blocks") + " it can't get at: /gk blocked)") + ".");
 		}
 	}
@@ -834,14 +972,16 @@ final class Job {
 	/** The area the walker may use: the circle and a bit, from below its lowest block to above its highest. */
 	private static int[] bounds(ClientPlayerEntity p) {
 		BlockPos c = plan.center;
-		int r = plan.radius + 10;
+		int[] b = plan.region.bounds();
 		int lo = Math.min(plan.minY == Integer.MAX_VALUE ? c.getY() : plan.minY, p.getBlockY()) - 12;
 		int hi = Math.max(plan.maxY == Integer.MIN_VALUE ? c.getY() : plan.maxY, p.getBlockY()) + 12;
-		return new int[] {c.getX() - r, lo, c.getZ() - r, c.getX() + r, hi, c.getZ() + r};
+		// The region and a bit, and wherever the player is (they can start outside it).
+		return new int[] {Math.min(b[0], p.getBlockX()) - 10, lo, Math.min(b[1], p.getBlockZ()) - 10, Math.max(b[2], p.getBlockX()) + 10, hi,
+				Math.max(b[3], p.getBlockZ()) + 10};
 	}
 
 	/** Breaks a block with whatever in the inventory is fastest on it. True once it's gone. */
-	private static boolean breakBlock(MinecraftClient client, ClientPlayerEntity p, ClientWorld w, BlockPos pos) {
+	static boolean breakBlock(MinecraftClient client, ClientPlayerEntity p, ClientWorld w, BlockPos pos) {
 		BlockState s = w.getBlockState(pos);
 		if (s.isAir()) {
 			breaking = null;
@@ -858,6 +998,8 @@ final class Job {
 			if (++breakTicks > 300) {
 				breaking = null;
 				client.interactionManager.cancelBlockBreaking();
+				// The shelter has its own way out of a block that won't break.
+				if (Shelter.active()) return false;
 				if (current != null) fail(current, "couldn't break " + s.getBlock().getName().getString());
 				else stop(client, "Stopped: couldn't break the block at " + pos.toShortString() + ".");
 				return false;
@@ -949,7 +1091,7 @@ final class Job {
 	}
 
 	/** Puts inventory slot {@code slot} in hand, swapping it into the hotbar if need be. */
-	private static void select(MinecraftClient client, ClientPlayerEntity p, int slot) {
+	static void select(MinecraftClient client, ClientPlayerEntity p, int slot) {
 		PlayerInventory inv = p.getInventory();
 		if (slot < 0) return;
 		if (slot < PlayerInventory.getHotbarSize()) {
@@ -963,7 +1105,7 @@ final class Job {
 		return index < 9 ? 36 + index : index;
 	}
 
-	private static void look(ClientPlayerEntity p, Vec3d at) {
+	static void look(ClientPlayerEntity p, Vec3d at) {
 		Vec3d d = at.subtract(p.getEyePos());
 		double flat = Math.sqrt(d.x * d.x + d.z * d.z);
 		p.setYaw((float) (MathHelper.atan2(d.z, d.x) * 180 / Math.PI) - 90);
@@ -1018,7 +1160,7 @@ final class Job {
 		return n;
 	}
 
-	private static int slot(PlayerInventory inv, Predicate<ItemStack> what) {
+	static int slot(PlayerInventory inv, Predicate<ItemStack> what) {
 		for (int i = 0; i < PlayerInventory.MAIN_SIZE; i++) if (!inv.getStack(i).isEmpty() && what.test(inv.getStack(i))) return i;
 		return -1;
 	}
