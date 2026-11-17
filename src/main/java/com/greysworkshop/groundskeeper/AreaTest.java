@@ -266,7 +266,9 @@ final class AreaTest {
 		}
 		if ("creeper".equals(phaseFlag)) {
 			int t = tick - flagAt;
-			if (t == 2) creeperStart = creeperDistance(client);
+			// The distance when the client first sees it (it can take a few ticks to arrive from the server).
+			if (t == 1) creeperStart = 999;
+			if (t >= 1 && creeperStart >= 999) creeperStart = creeperDistance(client);
 			if (t == 50) {
 				double d = creeperDistance(client);
 				check("lit creeper: ran from it (" + Math.round(creeperStart * 10) / 10.0 + " -> " + Math.round(d * 10) / 10.0 + " blocks)", d > creeperStart + 4);

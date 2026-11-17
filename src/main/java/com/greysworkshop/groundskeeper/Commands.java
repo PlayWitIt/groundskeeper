@@ -83,6 +83,21 @@ final class Commands {
 						"Eats when hungry: " + BoolArgumentType.getBool(c, "on")))))
 				.then(literal("totem").then(argument("on", BoolArgumentType.bool()).executes(c -> set(c, cf -> cf.totem = BoolArgumentType.getBool(c, "on"),
 						"Keeps a totem in an empty off hand: " + BoolArgumentType.getBool(c, "on")))))
+				.then(literal("tools")
+						.executes(c -> {
+							GkConfig cf = GkConfig.INSTANCE;
+							c.getSource().sendFeedback(Text.literal(cf.protectTools
+									? "Tool guard on: each tool is put aside with " + cf.toolReserve + " uses left, so you can mend it. /gk tools off, /gk tools reserve <uses>"
+									: "Tool guard off: tools are used until they break. /gk tools on").formatted(Formatting.GRAY));
+							return 1;
+						})
+						.then(literal("on").executes(c -> set(c, cf -> cf.protectTools = true,
+								"Tool guard on: tools are put aside with " + GkConfig.INSTANCE.toolReserve + " uses left, so you can mend them")))
+						.then(literal("off").executes(c -> set(c, cf -> cf.protectTools = false, "Tool guard off: tools are used until they break")))
+						.then(literal("reserve").then(argument("uses", IntegerArgumentType.integer(2, 500)).executes(c -> set(c, cf -> {
+							cf.toolReserve = IntegerArgumentType.getInteger(c, "uses");
+							cf.protectTools = true;
+						}, "Tool guard on: tools are put aside with " + IntegerArgumentType.getInteger(c, "uses") + " uses left")))))
 				.then(literal("start").executes(c -> {
 					MinecraftClient client = MinecraftClient.getInstance();
 					client.send(() -> Job.startOrResume(client));

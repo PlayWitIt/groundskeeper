@@ -100,6 +100,7 @@ The panel has buttons for all of this.
 | `/gk flowers <true\|false>` | break flowers on grass (default true) |
 | `/gk watch <true\|false>` | stay and watch it spread afterwards (default true) |
 | `/gk minhealth <n>` | hold off at or below this health (default 10, 5 hearts) |
+| `/gk tools <on\|off>` / `reserve <2-500>` | tool guard: put tools aside before they break, to mend (default on, 10 uses) |
 | `/gk swap <from> <to>` / `off` | any block to any other block (exposed tops only), e.g. `/gk swap sand red_sand` |
 
 ## Good to know
@@ -108,7 +109,9 @@ The panel has buttons for all of this.
   can't be reached (it shows in `/gk blocked`), so it seeds around it instead.
 - Seeds leave a dirt drop each (the broken grass). It's thrown out only if the inventory is full when it needs to pick
   the shulker box back up.
-- It won't use a tool with 2 or fewer uses left.
+- **Tool guard** (on by default): it puts a hoe, shovel or pickaxe aside when it's down to 10 uses, so you can mend it
+  instead of losing it. It moves on to another one if you carry one, else it stops and tells you which tool needs
+  mending. `/gk tools reserve <n>` keeps more or fewer uses back; `/gk tools off` uses tools until they break.
 - Check the server's rules on automation before using it on a server.
 
 ## Developing
@@ -116,6 +119,7 @@ The panel has buttons for all of this.
 an overhang, a pond, a sapling and glass on grass), runs the job in survival, then speeds up random ticks 100x and
 checks the circle ends up all mycelium with no grass getting in. The map also has a waterfall and a 2-deep pond, and it
 checks the walker doesn't get stuck. It also hits the player and pauses the job, to check it lets go and carries on.
+Then the tool guard: a nearly worn hoe is refused, and a job stops with the hoe kept at exactly 10 uses.
 
 `./gradlew runAreaTest` does the big-area side for real on a flat world: a 48 × 32 area with a cut-out, in 16-block
 tiles; seams between worked and unworked tiles; progress read back from the file as after a restart; eating and the

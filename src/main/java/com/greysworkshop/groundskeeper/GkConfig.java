@@ -63,6 +63,10 @@ final class GkConfig {
 	boolean autoEat = true;
 	/** Keep a totem in an empty off hand. */
 	boolean totem = true;
+	/** Tool guard: put a tool aside with {@link #toolReserve} uses left, so it can be mended instead of breaking. */
+	boolean protectTools = true;
+	/** Uses a tool keeps when the tool guard is on (at least 2: one use can cost a sword 2). */
+	int toolReserve = 10;
 	long totalSeeds, totalBlocks;
 
 	static void load() {
@@ -86,6 +90,7 @@ final class GkConfig {
 		if (c.players == null) c.players = Threat.Players.NAUGHTY;
 		if (c.zoneDimension == null) c.zoneDimension = "";
 		c.zoneDistance = Math.max(0, Math.min(10_000, c.zoneDistance));
+		c.toolReserve = Math.max(2, Math.min(500, c.toolReserve));
 	}
 
 	static void save() {

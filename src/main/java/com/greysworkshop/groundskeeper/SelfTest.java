@@ -8,6 +8,7 @@ import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.util.ScreenshotRecorder;
+import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.resource.DataConfiguration;
 import net.minecraft.resource.featuretoggle.FeatureFlags;
@@ -208,10 +209,57 @@ final class SelfTest {
 					check("border still path, nothing got in (" + r[1] + ")", r[1] == 0);
 					check("grass outside untouched (" + r[2] + " vs " + outsideGrassBefore + ")", r[2] >= outsideGrassBefore);
 					check("no plain dirt left inside (" + r[3] + ")", r[3] == 0);
+					next("tools");
+				} else if (since > 20 * 60 * 6) fail(client, "still not all mycelium after 6 minutes at 100x: " + Job.status.getString());
+			}
+			// Tool guard (on by default): a hoe is put aside with 10 uses left so it can be mended, never broken.
+			case "tools" -> {
+				var inv = client.player.getInventory();
+				java.util.function.Predicate<ItemStack> hoe = st -> st.isOf(Items.DIAMOND_HOE);
+				if (since == 1) {
+					command(client, "clear @p");
+					command(client, "tp @p 60.5 " + (GROUND + 1) + " 0.5");
+					command(client, "give @p minecraft:diamond_hoe[minecraft:damage=1551]");
+				}
+				if (since == 20) {
+					check("tool guard is on by default, keeping 10 uses (" + GkConfig.INSTANCE.protectTools + ", " + GkConfig.INSTANCE.toolReserve + ")",
+							GkConfig.INSTANCE.protectTools && GkConfig.INSTANCE.toolReserve == 10);
+					String note = Job.asideNote(inv, hoe, "hoe");
+					check("a hoe with 10 uses left is put aside to mend (" + note + ")", Job.best(inv, hoe) < 0 && note.contains("down to 10 uses"));
+					GkConfig.INSTANCE.protectTools = false;
+					boolean offUses = Job.best(inv, hoe) >= 0;
+					GkConfig.INSTANCE.protectTools = true;
+					check("with the tool guard off it would use that hoe", offUses);
+					Selection.set(client, client.player, new BlockPos(60, GROUND, 0), 4);
+					Job.start(client, Plan.make(client.world, Selection.center, Selection.radius, true));
+					check("won't start with only that hoe, and says why (" + Job.stopReason + ")", !Job.running() && Job.stopReason.contains("mend"));
+					// Digging (the night bunker) with no better tool: it puts the worn hoe away rather than dig with it.
+					inv.setSelectedSlot(0);
+					Job.breakBlock(client, client.player, client.world, new BlockPos(62, GROUND - 1, 3));
+					client.interactionManager.cancelBlockBreaking();
+				}
+				if (since == 24) {
+					check("digging with nothing better: the worn hoe is put away, not used (" + client.player.getMainHandStack() + ")", !hoe.test(client.player.getMainHandStack()));
+					command(client, "clear @p");
+					command(client, "give @p minecraft:diamond_hoe[minecraft:damage=1548]");
+					command(client, "give @p minecraft:diamond_shovel");
+					command(client, "give @p minecraft:mycelium 64");
+				}
+				if (since == 40) {
+					Selection.set(client, client.player, new BlockPos(60, GROUND, 0), 4);
+					Job.start(client, Plan.make(client.world, Selection.center, Selection.radius, true));
+					check("started a job with a hoe 3 uses from the reserve", Job.running());
+				}
+				if (since > 40 && (!Job.running() || since > 40 + 20 * 60)) {
+					int left = -1;
+					for (int i = 0; i < 36; i++) if (hoe.test(inv.getStack(i))) left = inv.getStack(i).getMaxDamage() - inv.getStack(i).getDamage();
+					check("stopped with the hoe kept at 10 uses, ready to mend (" + left + " left, tilled " + Job.tilled + ": " + Job.stopReason + ")",
+							!Job.running() && left == 10 && Job.tilled == 3 && Job.stopReason.contains("mend"));
+					if (Job.running()) Job.stop(client, "test over");
 					command(client, "gamemode spectator @p");
 					command(client, "tp @p 0.5 -38 -24.5 0 40");
 					next("photo");
-				} else if (since > 20 * 60 * 6) fail(client, "still not all mycelium after 6 minutes at 100x: " + Job.status.getString());
+				}
 			}
 			case "photo" -> {
 				if (since == 60) screenshot(client, "3_done");

@@ -92,10 +92,16 @@ final class PanelScreen extends Screen {
 			cf.watch = v;
 			GkConfig.save();
 		}, "After the work, stay in the middle, look again every 30 seconds and fix grass that comes back, until it's all mycelium."));
-		addDrawableChild(toggle(x + half + 4, y, half, "HUD", () -> cf.hud, v -> {
+		int hudW = 56;
+		addDrawableChild(toggle(x + half + 4, y, hudW, "HUD", () -> cf.hud, v -> {
 			cf.hud = v;
 			GkConfig.save();
 		}, "The lines at the top left while it works."));
+		addDrawableChild(toggle(x + half + 8 + hudW, y, half - hudW - 4, "Tool guard", () -> cf.protectTools, v -> {
+			cf.protectTools = v;
+			GkConfig.save();
+		}, "On: a hoe, shovel or pickaxe is put aside with " + cf.toolReserve + " uses left (/gk tools reserve), so you can mend it instead of losing it. "
+				+ "Off: tools are used until they break."));
 		// Big areas.
 		y += gap;
 		Project area = client == null ? null : Areas.get(client);
@@ -177,7 +183,7 @@ final class PanelScreen extends Screen {
 			if (a.getX() < 0 || a.getY() < 0 || a.getX() + a.getWidth() > width || a.getY() + a.getHeight() > height) return false;
 			for (var b : all) if (a != b && a.getX() < b.getX() + b.getWidth() && b.getX() < a.getX() + a.getWidth() && a.getY() < b.getY() + b.getHeight() && b.getY() < a.getY() + a.getHeight()) return false;
 		}
-		return all.size() >= 15;
+		return all.size() >= 16;
 	}
 
 	/** A setting that changes the plan: save it, and plan again. */

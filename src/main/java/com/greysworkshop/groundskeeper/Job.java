@@ -266,8 +266,7 @@ final class Job {
 	}
 
 	private static String toolNote(PlayerInventory inv, net.minecraft.registry.tag.TagKey<Item> tag) {
-		for (int i = 0; i < PlayerInventory.MAIN_SIZE; i++) if (inv.getStack(i).isIn(tag)) return "(Yours is about to break: it won't use it.)";
-		return "";
+		return asideNote(inv, s -> s.isIn(tag), tag == ItemTags.HOES ? "hoe" : "shovel");
 	}
 
 	static void stop(MinecraftClient client, String why) {
@@ -549,7 +548,8 @@ final class Job {
 			return;
 		}
 		if (!hold(client, p, tool)) {
-			stop(client, "Stopped: no " + name + " left (it won't use one with 2 or fewer uses left).");
+			String aside = asideNote(p.getInventory(), tool, name);
+			stop(client, "Stopped: no " + name + " left." + (aside.isEmpty() ? "" : " " + aside));
 			return;
 		}
 		Vec3d hit = Vec3d.ofCenter(t.pos).add(0, 0.5, 0);
@@ -1031,6 +1031,20 @@ final class Job {
 			}
 		}
 		if (best >= 0 && inv.getStack(best) != p.getMainHandStack()) select(client, p, best);
+		else if (best < 0 && !safe(p.getMainHandStack())) select(client, p, harmless(inv));
+	}
+
+	/** A slot to hold instead of a tool that's been put aside: empty, or something that can't wear out. -1: none. */
+	static int harmless(PlayerInventory inv) {
+		int fallback = -1;
+		for (int i = 0; i < PlayerInventory.MAIN_SIZE; i++) {
+			ItemStack s = inv.getStack(i);
+			if (s.isEmpty() || !s.isDamageable()) {
+				if (i < PlayerInventory.getHotbarSize()) return i;
+				if (fallback < 0) fallback = i;
+			}
+		}
+		return fallback;
 	}
 
 	static boolean silk(ItemStack s) {
@@ -1038,9 +1052,33 @@ final class Job {
 		return false;
 	}
 
-	/** Never wears a tool down to nothing: 2 uses left and it's put aside. */
-	private static boolean safe(ItemStack s) {
-		return !s.isDamageable() || s.getMaxDamage() - s.getDamage() > 2;
+	/**
+	 * Whether it may use this tool. With the tool guard on (the default) a tool is put aside with {@code toolReserve}
+	 * uses left, so you can mend it; with it off, tools are used until they break.
+	 */
+	static boolean safe(ItemStack s) {
+		if (!s.isDamageable()) return true;
+		int left = s.getMaxDamage() - s.getDamage();
+		return GkConfig.INSTANCE.protectTools ? left > GkConfig.INSTANCE.toolReserve : left > 0;
+	}
+
+	/** Uses it keeps back on each tool (0 with the guard off). */
+	static int reserve() {
+		return GkConfig.INSTANCE.protectTools ? GkConfig.INSTANCE.toolReserve : 0;
+	}
+
+	/** Why there's no usable tool of this kind when you have one: it's been put aside to mend. Empty if not that. */
+	static String asideNote(PlayerInventory inv, Predicate<ItemStack> what, String name) {
+		int most = -1;
+		for (int i = 0; i < PlayerInventory.MAIN_SIZE; i++) {
+			ItemStack s = inv.getStack(i);
+			if (s.isEmpty() || !what.test(s) || safe(s)) continue;
+			most = Math.max(most, s.getMaxDamage() - s.getDamage());
+		}
+		if (most < 0) return "";
+		return GkConfig.INSTANCE.protectTools
+				? "Your " + name + " is down to " + most + " uses: put aside so you can mend it (tool guard, /gk tools)."
+				: "Your " + name + " is worn out.";
 	}
 
 	/** Uses left in all the safe tools matching {@code what} (Unbreaking makes them last longer than this). */
@@ -1049,7 +1087,7 @@ final class Job {
 		for (int i = 0; i < PlayerInventory.MAIN_SIZE; i++) {
 			ItemStack s = inv.getStack(i);
 			if (s.isEmpty() || !what.test(s) || !safe(s)) continue;
-			n += s.isDamageable() ? s.getMaxDamage() - s.getDamage() - 2 : 100_000;
+			n += s.isDamageable() ? s.getMaxDamage() - s.getDamage() - reserve() : 100_000;
 		}
 		return n;
 	}
@@ -1063,7 +1101,8 @@ final class Job {
 		int dig = p.count(Plan.Kind.PATH) + p.seeds() + p.dirtSwaps(), shovel = uses(inv, s -> s.isIn(ItemTags.SHOVELS));
 		if (shovel > 0 && shovel < dig) b.append("Shovel: ").append(shovel).append(" uses for ").append(dig).append(". ");
 		if (b.isEmpty()) return null;
-		return b + "Bring another, or Mending/Unbreaking: it stops before one breaks.";
+		return b + (GkConfig.INSTANCE.protectTools ? "Bring another, or Mending/Unbreaking: it puts each aside with "
+				+ GkConfig.INSTANCE.toolReserve + " uses left to mend." : "Bring another: the tool guard is off, so they'll break.");
 	}
 
 	/** The best (most uses left) safe stack matching {@code what}, or -1. */
