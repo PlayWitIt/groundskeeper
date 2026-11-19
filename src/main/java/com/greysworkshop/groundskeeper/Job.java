@@ -1145,6 +1145,8 @@ final class Job {
 		}
 		if (slot < PlayerInventory.getHotbarSize()) {
 			inv.setSelectedSlot(slot);
+			// Before the block is hit: one that breaks at once would otherwise go with the old item (Silk Touch, a worn tool).
+			((com.greysworkshop.groundskeeper.mixin.SlotSync) client.interactionManager).groundskeeper$syncSelectedSlot();
 			return;
 		}
 		client.interactionManager.clickSlot(p.playerScreenHandler.syncId, slot, inv.getSelectedSlot(), SlotActionType.SWAP, p);
