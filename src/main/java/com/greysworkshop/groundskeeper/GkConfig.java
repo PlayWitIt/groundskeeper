@@ -35,6 +35,8 @@ final class GkConfig {
 		STOP
 	}
 
+	/** The whole mod. Off: no keys, no HUD, nothing runs (the panel and /gk on still work). */
+	boolean enabled = true;
 	/** Blocks between mycelium seeds. Smaller spreads faster but uses more mycelium. */
 	int spacing = 5;
 	Border border = Border.PATH;

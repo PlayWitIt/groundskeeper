@@ -146,8 +146,37 @@ final class SelfTest {
 							client.currentScreen instanceof PanelScreen ps && ps.fits());
 					screenshot(client, "0_panel");
 				}
-				if (tick == 256) client.setScreen(null);
-				if (tick == 260) {
+				if (tick == 252) client.setScreen(null);
+				// A stray start key (End on some laptops sends Numpad 1) mustn't start work: it takes a second press.
+				if (tick == 254) {
+					Groundskeeper.startKeyPressed(client);
+					check("one press of the start key doesn't start anything", !Job.running());
+				}
+				if (tick == 256) {
+					Groundskeeper.startKeyPressed(client);
+					check("a second press within 3 seconds starts", Job.running());
+					Job.stop(client, "test");
+					check("...and stopping keeps the circle", !Job.running() && Selection.mode == Selection.Mode.READY);
+				}
+				// Off: the keys do nothing.
+				if (tick == 258) {
+					Groundskeeper.setEnabled(client, false);
+					net.minecraft.client.util.InputUtil.Key kp1 = net.minecraft.client.util.InputUtil.Type.KEYSYM.createFromCode(org.lwjgl.glfw.GLFW.GLFW_KEY_KP_1);
+					net.minecraft.client.option.KeyBinding.onKeyPressed(kp1);
+					net.minecraft.client.option.KeyBinding.onKeyPressed(kp1);
+				}
+				if (tick == 262) {
+					check("turned off, the start key does nothing", !GkConfig.INSTANCE.enabled && !Job.running());
+					client.setScreen(new PanelScreen());
+				}
+				if (tick == 268) {
+					check("the panel fits with the mod off too, and says it's off", client.currentScreen instanceof PanelScreen ps && ps.fits());
+					screenshot(client, "0_panel_off");
+					Groundskeeper.setEnabled(client, true);
+					check("and back on", GkConfig.INSTANCE.enabled);
+				}
+				if (tick == 272) client.setScreen(null);
+				if (tick == 280) {
 					Job.start(client, Plan.make(client.world, Selection.center, Selection.radius, true));
 					check("started", Job.running());
 					next("work");

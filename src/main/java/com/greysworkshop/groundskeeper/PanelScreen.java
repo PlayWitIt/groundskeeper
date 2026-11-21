@@ -175,6 +175,17 @@ final class PanelScreen extends Screen {
 		}
 		textTop = y + (compact ? 26 : 30);
 		textBottom = compact ? height - 4 : height - 40;
+		// Off: everything else is greyed out until it's switched back on.
+		if (!cf.enabled) {
+			for (var c : children()) if (c instanceof net.minecraft.client.gui.widget.ClickableWidget w) w.active = false;
+		}
+		ButtonWidget power = ButtonWidget.builder(Text.literal("Mod: " + (cf.enabled ? "on" : "off")), b -> {
+			Groundskeeper.setEnabled(MinecraftClient.getInstance(), !GkConfig.INSTANCE.enabled);
+			clearAndInit();
+		}).dimensions(6, 4, 70, 20).tooltip(net.minecraft.client.gui.tooltip.Tooltip.of(Text.literal(cf.enabled
+				? "Turn Groundskeeper off: its keys do nothing, the HUD goes and any job stops. Same as /gk off."
+				: "Turn Groundskeeper back on. Same as /gk on."))).build();
+		addDrawableChild(power);
 		if (compact) addDrawableChild(ButtonWidget.builder(Text.literal("Done"), b -> close()).dimensions(width - 56, 4, 50, 20).build());
 		else addDrawableChild(ButtonWidget.builder(Text.literal("Done"), b -> close()).dimensions(width / 2 - 50, height - 28, 100, 20).build());
 	}
@@ -239,6 +250,13 @@ final class PanelScreen extends Screen {
 	private record Line(String text, int color) {}
 
 	private List<Line> lines() {
+		if (!GkConfig.INSTANCE.enabled) {
+			return List.of(new Line("Groundskeeper is off.", RED), new Line("Its keys do nothing. Mod: on (top left) or /gk on.", GRAY));
+		}
+		return linesOn();
+	}
+
+	private List<Line> linesOn() {
 		List<Line> out = new ArrayList<>();
 		MinecraftClient c = MinecraftClient.getInstance();
 		if (c.player == null) return out;

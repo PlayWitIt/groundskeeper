@@ -15,7 +15,7 @@ final class Hud {
 
 	static void render(DrawContext context, RenderTickCounter counter) {
 		MinecraftClient client = MinecraftClient.getInstance();
-		if (!GkConfig.INSTANCE.hud || client.player == null || client.options.hudHidden || client.getDebugHud().shouldShowDebugHud()) return;
+		if (!GkConfig.INSTANCE.enabled || !GkConfig.INSTANCE.hud || client.player == null || client.options.hudHidden || client.getDebugHud().shouldShowDebugHud()) return;
 		if (!Job.running()) return;
 		int y = 4;
 		for (Text line : lines(client)) {

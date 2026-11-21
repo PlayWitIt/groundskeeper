@@ -100,8 +100,22 @@ final class Commands {
 							cf.toolReserve = IntegerArgumentType.getInteger(c, "uses");
 							cf.protectTools = true;
 						}, "Tool guard on: tools are put aside with " + IntegerArgumentType.getInteger(c, "uses") + " uses left")))))
+				.then(literal("on").executes(c -> {
+					MinecraftClient client = MinecraftClient.getInstance();
+					client.send(() -> Groundskeeper.setEnabled(client, true));
+					return 1;
+				}))
+				.then(literal("off").executes(c -> {
+					MinecraftClient client = MinecraftClient.getInstance();
+					client.send(() -> Groundskeeper.setEnabled(client, false));
+					return 1;
+				}))
 				.then(literal("start").executes(c -> {
 					MinecraftClient client = MinecraftClient.getInstance();
+					if (!GkConfig.INSTANCE.enabled) {
+						c.getSource().sendError(Text.literal("Groundskeeper is off. /gk on turns it back on."));
+						return 0;
+					}
 					client.send(() -> Job.startOrResume(client));
 					return 1;
 				}))
